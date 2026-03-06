@@ -1,9 +1,6 @@
 import type {
-	ICredentialTestFunctions,
-	ICredentialsDecrypted,
 	IDataObject,
 	IExecuteFunctions,
-	INodeCredentialTestResult,
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
@@ -71,7 +68,6 @@ export class YealinkYmcs implements INodeType {
 			{
 				name: 'yealinkYmcsApi',
 				required: true,
-				testedBy: 'yealinkYmcsApiTest',
 			},
 		],
 		properties: [
@@ -132,59 +128,6 @@ export class YealinkYmcs implements INodeType {
 			...siteOperations,
 			...siteFields,
 		],
-	};
-
-	methods = {
-		credentialTest: {
-			async yealinkYmcsApiTest(
-				this: ICredentialTestFunctions,
-				credential: ICredentialsDecrypted,
-			): Promise<INodeCredentialTestResult> {
-				try {
-					const creds = credential.data as IDataObject;
-					const region = (creds.region as string) || 'us';
-					const clientId = creds.clientId as string;
-					const clientSecret = creds.clientSecret as string;
-					const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString(
-						'base64',
-					);
-					const hosts: Record<string, string> = {
-						us: 'https://us-api.ymcs.yealink.com',
-						eu: 'https://eu-api.ymcs.yealink.com',
-						au: 'https://au-api.ymcs.yealink.com',
-					};
-					const baseUrl = hosts[region] ?? hosts.us;
-					const nonce = Array.from({ length: 32 }, () =>
-						Math.floor(Math.random() * 16).toString(16),
-					).join('');
-
-					// ICredentialTestFunctions only exposes helpers.request, not httpRequest
-					// eslint-disable-next-line @n8n/community-nodes/no-deprecated-workflow-functions
-					await this.helpers.request({
-						method: 'POST',
-						uri: `${baseUrl}/v2/token`,
-						headers: {
-							Authorization: `Basic ${basicAuth}`,
-							'Content-Type': 'application/json',
-							timestamp: String(Date.now()),
-							nonce,
-						},
-						body: { grant_type: 'client_credentials' },
-						json: true,
-					});
-
-					return {
-						status: 'OK',
-						message: 'Connection successful',
-					};
-				} catch (error) {
-					return {
-						status: 'Error',
-						message: `Connection failed: ${(error as Error).message}`,
-					};
-				}
-			},
-		},
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
@@ -901,7 +844,7 @@ async function handleRpsOperation(
 		const mac = this.getNodeParameter('mac', i) as string;
 		const serverUrl = this.getNodeParameter('serverUrl', i) as string;
 		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
-		return await ymcsApiRequest.call(this, 'POST', '/v2/dm/rps/devices', {
+		return await ymcsApiRequest.call(this, 'POST', '/v2/rps/devices', {
 			mac,
 			serverUrl,
 			...additionalFields,
@@ -911,12 +854,12 @@ async function handleRpsOperation(
 	if (operation === 'createMany') {
 		const devicesJson = this.getNodeParameter('devicesJson', i) as string;
 		const devices = JSON.parse(devicesJson);
-		return await ymcsApiRequest.call(this, 'POST', '/v2/dm/rps/addDevices', { devices });
+		return await ymcsApiRequest.call(this, 'POST', '/v2/rps/addDevices', { devices });
 	}
 
 	if (operation === 'delete') {
 		const rpsDeviceId = this.getNodeParameter('rpsDeviceId', i) as string;
-		await ymcsApiRequest.call(this, 'DELETE', `/v2/dm/rps/devices/${rpsDeviceId}`);
+		await ymcsApiRequest.call(this, 'DELETE', `/v2/rps/devices/${rpsDeviceId}`);
 		return { deleted: true };
 	}
 
@@ -925,12 +868,12 @@ async function handleRpsOperation(
 		const filters = this.getNodeParameter('filters', i, {}) as IDataObject;
 		const body: IDataObject = { filter: filters };
 		if (returnAll) {
-			return await ymcsApiRequestAllItems.call(this, '/v2/dm/rps/listDevices', body);
+			return await ymcsApiRequestAllItems.call(this, '/v2/rps/listDevices', body);
 		}
 		const limit = this.getNodeParameter('limit', i) as number;
 		return await ymcsApiRequestAllItems.call(
 			this,
-			'/v2/dm/rps/listDevices',
+			'/v2/rps/listDevices',
 			body,
 			'data',
 			limit,
@@ -943,7 +886,7 @@ async function handleRpsOperation(
 		return await ymcsApiRequest.call(
 			this,
 			'PATCH',
-			`/v2/dm/rps/devices/${rpsDeviceId}`,
+			`/v2/rps/devices/${rpsDeviceId}`,
 			updateFields,
 		);
 	}
@@ -952,12 +895,12 @@ async function handleRpsOperation(
 		const returnAll = this.getNodeParameter('returnAll', i) as boolean;
 		const body: IDataObject = {};
 		if (returnAll) {
-			return await ymcsApiRequestAllItems.call(this, '/v2/dm/rps/listServers', body);
+			return await ymcsApiRequestAllItems.call(this, '/v2/rps/listServers', body);
 		}
 		const limit = this.getNodeParameter('limit', i) as number;
 		return await ymcsApiRequestAllItems.call(
 			this,
-			'/v2/dm/rps/listServers',
+			'/v2/rps/listServers',
 			body,
 			'data',
 			limit,
@@ -967,7 +910,7 @@ async function handleRpsOperation(
 	if (operation === 'createServer') {
 		const serverUrl = this.getNodeParameter('serverUrl', i) as string;
 		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
-		return await ymcsApiRequest.call(this, 'POST', '/v2/dm/rps/servers', {
+		return await ymcsApiRequest.call(this, 'POST', '/v2/rps/servers', {
 			serverUrl,
 			...additionalFields,
 		});
@@ -975,7 +918,7 @@ async function handleRpsOperation(
 
 	if (operation === 'deleteServer') {
 		const rpsServerId = this.getNodeParameter('rpsServerId', i) as string;
-		await ymcsApiRequest.call(this, 'DELETE', `/v2/dm/rps/servers/${rpsServerId}`);
+		await ymcsApiRequest.call(this, 'DELETE', `/v2/rps/servers/${rpsServerId}`);
 		return { deleted: true };
 	}
 
@@ -985,7 +928,7 @@ async function handleRpsOperation(
 		return await ymcsApiRequest.call(
 			this,
 			'PATCH',
-			`/v2/dm/rps/servers/${rpsServerId}`,
+			`/v2/rps/servers/${rpsServerId}`,
 			updateFields,
 		);
 	}
@@ -1117,21 +1060,13 @@ async function handleConfigurationOperation(
 ): Promise<IDataObject | IDataObject[]> {
 	// Device config operations
 	if (operation === 'getDeviceConfig') {
-		const deviceId = this.getNodeParameter('deviceId', i) as string;
 		const configId = this.getNodeParameter('configId', i) as string;
-		return await ymcsApiRequest.call(
-			this,
-			'GET',
-			`/v2/dm/deviceConfigs/${configId}`,
-			{},
-			{ deviceId },
-		);
+		return await ymcsApiRequest.call(this, 'GET', `/v2/dm/deviceConfigs/${configId}`);
 	}
 
 	if (operation === 'getAllDeviceConfigs') {
-		const deviceId = this.getNodeParameter('deviceId', i) as string;
 		const returnAll = this.getNodeParameter('returnAll', i) as boolean;
-		const body: IDataObject = { deviceId };
+		const body: IDataObject = {};
 		if (returnAll) {
 			return await ymcsApiRequestAllItems.call(this, '/v2/dm/listDeviceConfigs', body);
 		}
@@ -1146,20 +1081,26 @@ async function handleConfigurationOperation(
 	}
 
 	if (operation === 'createDeviceConfig') {
-		const deviceId = this.getNodeParameter('deviceId', i) as string;
-		const configJson = this.getNodeParameter('configJson', i) as string;
-		const config = JSON.parse(configJson);
+		const name = this.getNodeParameter('name', i) as string;
+		const modelId = this.getNodeParameter('modelId', i) as string;
+		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
 		return await ymcsApiRequest.call(this, 'POST', '/v2/dm/deviceConfigs', {
-			deviceId,
-			...config,
+			name,
+			modelId,
+			...additionalFields,
 		});
 	}
 
 	if (operation === 'updateDeviceConfig') {
 		const configId = this.getNodeParameter('configId', i) as string;
-		const configJson = this.getNodeParameter('configJson', i) as string;
-		const config = JSON.parse(configJson);
-		return await ymcsApiRequest.call(this, 'PATCH', `/v2/dm/deviceConfigs/${configId}`, config);
+		const name = this.getNodeParameter('name', i) as string;
+		const modelId = this.getNodeParameter('modelId', i) as string;
+		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
+		return await ymcsApiRequest.call(this, 'PATCH', `/v2/dm/deviceConfigs/${configId}`, {
+			name,
+			modelId,
+			...additionalFields,
+		});
 	}
 
 	if (operation === 'deleteDeviceConfigs') {
@@ -1170,31 +1111,23 @@ async function handleConfigurationOperation(
 	}
 
 	if (operation === 'pushDeviceConfig') {
-		const deviceIds = (this.getNodeParameter('deviceIds', i) as string)
-			.split(',')
-			.map((id) => id.trim());
-		return await ymcsApiRequest.call(this, 'POST', '/v2/dm/devices/pushConfigs', {
-			deviceIds,
-		});
+		const configId = this.getNodeParameter('configId', i) as string;
+		return await ymcsApiRequest.call(
+			this,
+			'POST',
+			`/v2/dm/deviceConfigs/${configId}/push`,
+		);
 	}
 
 	// Site config operations
 	if (operation === 'getSiteConfig') {
-		const siteId = this.getNodeParameter('siteId', i) as string;
 		const configId = this.getNodeParameter('configId', i) as string;
-		return await ymcsApiRequest.call(
-			this,
-			'GET',
-			`/v2/dm/siteConfigs/${configId}`,
-			{},
-			{ siteId },
-		);
+		return await ymcsApiRequest.call(this, 'GET', `/v2/dm/siteConfigs/${configId}`);
 	}
 
 	if (operation === 'getAllSiteConfigs') {
-		const siteId = this.getNodeParameter('siteId', i) as string;
 		const returnAll = this.getNodeParameter('returnAll', i) as boolean;
-		const body: IDataObject = { siteId };
+		const body: IDataObject = {};
 		if (returnAll) {
 			return await ymcsApiRequestAllItems.call(this, '/v2/dm/listSiteConfigs', body);
 		}
@@ -1209,20 +1142,30 @@ async function handleConfigurationOperation(
 	}
 
 	if (operation === 'createSiteConfig') {
+		const name = this.getNodeParameter('name', i) as string;
 		const siteId = this.getNodeParameter('siteId', i) as string;
-		const configJson = this.getNodeParameter('configJson', i) as string;
-		const config = JSON.parse(configJson);
+		const deviceType = this.getNodeParameter('deviceType', i) as number;
+		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
 		return await ymcsApiRequest.call(this, 'POST', '/v2/dm/siteConfigs', {
+			name,
 			siteId,
-			...config,
+			deviceType,
+			...additionalFields,
 		});
 	}
 
 	if (operation === 'updateSiteConfig') {
 		const configId = this.getNodeParameter('configId', i) as string;
-		const configJson = this.getNodeParameter('configJson', i) as string;
-		const config = JSON.parse(configJson);
-		return await ymcsApiRequest.call(this, 'PATCH', `/v2/dm/siteConfigs/${configId}`, config);
+		const name = this.getNodeParameter('name', i) as string;
+		const siteId = this.getNodeParameter('siteId', i) as string;
+		const deviceType = this.getNodeParameter('deviceType', i) as number;
+		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
+		return await ymcsApiRequest.call(this, 'PATCH', `/v2/dm/siteConfigs/${configId}`, {
+			name,
+			siteId,
+			deviceType,
+			...additionalFields,
+		});
 	}
 
 	if (operation === 'deleteSiteConfigs') {
@@ -1233,29 +1176,23 @@ async function handleConfigurationOperation(
 	}
 
 	if (operation === 'pushSiteConfig') {
-		const siteIds = (this.getNodeParameter('siteIds', i) as string)
-			.split(',')
-			.map((id) => id.trim());
-		return await ymcsApiRequest.call(this, 'POST', '/v2/dm/sites/pushConfigs', { siteIds });
+		const configId = this.getNodeParameter('configId', i) as string;
+		return await ymcsApiRequest.call(
+			this,
+			'POST',
+			`/v2/dm/siteConfigs/${configId}/push`,
+		);
 	}
 
 	// Group config operations
 	if (operation === 'getGroupConfig') {
-		const deviceGroupId = this.getNodeParameter('deviceGroupId', i) as string;
 		const configId = this.getNodeParameter('configId', i) as string;
-		return await ymcsApiRequest.call(
-			this,
-			'GET',
-			`/v2/dm/groupConfigs/${configId}`,
-			{},
-			{ deviceGroupId },
-		);
+		return await ymcsApiRequest.call(this, 'GET', `/v2/dm/groupConfigs/${configId}`);
 	}
 
 	if (operation === 'getAllGroupConfigs') {
-		const deviceGroupId = this.getNodeParameter('deviceGroupId', i) as string;
 		const returnAll = this.getNodeParameter('returnAll', i) as boolean;
-		const body: IDataObject = { deviceGroupId };
+		const body: IDataObject = {};
 		if (returnAll) {
 			return await ymcsApiRequestAllItems.call(this, '/v2/dm/listGroupConfigs', body);
 		}
@@ -1270,20 +1207,30 @@ async function handleConfigurationOperation(
 	}
 
 	if (operation === 'createGroupConfig') {
+		const name = this.getNodeParameter('name', i) as string;
 		const deviceGroupId = this.getNodeParameter('deviceGroupId', i) as string;
-		const configJson = this.getNodeParameter('configJson', i) as string;
-		const config = JSON.parse(configJson);
+		const deviceType = this.getNodeParameter('deviceType', i) as number;
+		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
 		return await ymcsApiRequest.call(this, 'POST', '/v2/dm/groupConfigs', {
+			name,
 			deviceGroupId,
-			...config,
+			deviceType,
+			...additionalFields,
 		});
 	}
 
 	if (operation === 'updateGroupConfig') {
 		const configId = this.getNodeParameter('configId', i) as string;
-		const configJson = this.getNodeParameter('configJson', i) as string;
-		const config = JSON.parse(configJson);
-		return await ymcsApiRequest.call(this, 'PATCH', `/v2/dm/groupConfigs/${configId}`, config);
+		const name = this.getNodeParameter('name', i) as string;
+		const deviceGroupId = this.getNodeParameter('deviceGroupId', i) as string;
+		const deviceType = this.getNodeParameter('deviceType', i) as number;
+		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
+		return await ymcsApiRequest.call(this, 'PATCH', `/v2/dm/groupConfigs/${configId}`, {
+			name,
+			deviceGroupId,
+			deviceType,
+			...additionalFields,
+		});
 	}
 
 	if (operation === 'deleteGroupConfigs') {
@@ -1294,12 +1241,12 @@ async function handleConfigurationOperation(
 	}
 
 	if (operation === 'pushGroupConfig') {
-		const deviceGroupIds = (this.getNodeParameter('deviceGroupIds', i) as string)
-			.split(',')
-			.map((id) => id.trim());
-		return await ymcsApiRequest.call(this, 'POST', '/v2/dm/deviceGroups/pushConfigs', {
-			deviceGroupIds,
-		});
+		const configId = this.getNodeParameter('configId', i) as string;
+		return await ymcsApiRequest.call(
+			this,
+			'POST',
+			`/v2/dm/groupConfigs/${configId}/push`,
+		);
 	}
 
 	throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`, {

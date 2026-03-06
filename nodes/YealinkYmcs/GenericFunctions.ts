@@ -1,13 +1,113 @@
+import * as crypto from 'crypto';
+// eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
+import * as https from 'https';
+// eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
+import * as querystring from 'querystring';
+
 import type {
 	IDataObject,
 	IExecuteFunctions,
 	IHookFunctions,
-	IHttpRequestOptions,
 	ILoadOptionsFunctions,
 	IWebhookFunctions,
 	JsonObject,
 } from 'n8n-workflow';
 import { NodeApiError } from 'n8n-workflow';
+
+// ---------------------------------------------------------------------------
+// Custom HTTPS agent for Yealink YMCS API servers.
+// The Yealink API servers require TLS renegotiation which OpenSSL 3.x
+// disables by default. We use a dedicated agent with SSL_OP_LEGACY_SERVER_CONNECT
+// so only connections through this agent are affected.
+// ---------------------------------------------------------------------------
+
+const ymcsAgent = new https.Agent({
+	secureOptions: crypto.constants.SSL_OP_LEGACY_SERVER_CONNECT,
+	keepAlive: true,
+});
+
+// ---------------------------------------------------------------------------
+// Low-level HTTPS request using the custom agent
+// ---------------------------------------------------------------------------
+
+interface YmcsRequestOptions {
+	method: string;
+	url: string;
+	headers?: Record<string, string>;
+	body?: unknown;
+	qs?: Record<string, string | number | boolean>;
+}
+
+async function ymcsRawRequest(options: YmcsRequestOptions): Promise<unknown> {
+	const parsedUrl = new URL(options.url);
+
+	if (options.qs && Object.keys(options.qs).length) {
+		const qsStr = querystring.stringify(options.qs as Record<string, string>);
+		parsedUrl.search = parsedUrl.search ? `${parsedUrl.search}&${qsStr}` : `?${qsStr}`;
+	}
+
+	const bodyStr =
+		options.body != null
+			? typeof options.body === 'string'
+				? options.body
+				: JSON.stringify(options.body)
+			: undefined;
+
+	return new Promise((resolve, reject) => {
+		const req = https.request(
+			{
+				hostname: parsedUrl.hostname,
+				port: parsedUrl.port || 443,
+				path: parsedUrl.pathname + parsedUrl.search,
+				method: options.method,
+				headers: {
+					...options.headers,
+					...(bodyStr != null ? { 'Content-Length': String(Buffer.byteLength(bodyStr)) } : {}),
+				},
+				agent: ymcsAgent,
+			},
+			(res) => {
+				const chunks: Buffer[] = [];
+				res.on('data', (chunk: Buffer) => chunks.push(chunk));
+				res.on('end', () => {
+					const raw = Buffer.concat(chunks).toString('utf8');
+					const statusCode = res.statusCode ?? 0;
+
+					let parsed: unknown;
+					try {
+						parsed = JSON.parse(raw);
+					} catch {
+						parsed = raw;
+					}
+
+					if (statusCode >= 400) {
+						const err: Record<string, unknown> = {
+							message: `Request failed with status ${statusCode}`,
+							httpCode: statusCode,
+							response: { body: parsed },
+						};
+						reject(err);
+						return;
+					}
+
+					resolve(parsed);
+				});
+			},
+		);
+
+		req.on('error', (err) => {
+			reject({
+				message: err.message,
+				code: (err as NodeJS.ErrnoException).code,
+			});
+		});
+
+		if (bodyStr != null) {
+			req.write(bodyStr);
+		}
+		req.end();
+	});
+}
 
 // ---------------------------------------------------------------------------
 // Region → Base URL mapping
@@ -48,10 +148,11 @@ interface CachedToken {
 const tokenCache = new Map<string, CachedToken>();
 
 export async function getAccessToken(
-	context: IExecuteFunctions | ILoadOptionsFunctions | IHookFunctions | IWebhookFunctions | { helpers: { httpRequest: (options: IHttpRequestOptions) => Promise<unknown> } },
+	_context: unknown,
 	credentials: IDataObject,
 ): Promise<string> {
 	const clientId = credentials.clientId as string;
+	const clientSecret = credentials.clientSecret as string;
 	const cached = tokenCache.get(clientId);
 
 	// Return cached token if still valid (5-minute safety margin)
@@ -59,11 +160,10 @@ export async function getAccessToken(
 		return cached.token;
 	}
 
-	const clientSecret = credentials.clientSecret as string;
 	const region = credentials.region as string;
 	const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
-	const response = (await context.helpers.httpRequest({
+	const response = (await ymcsRawRequest({
 		method: 'POST',
 		url: `${getBaseUrl(region)}/v2/token`,
 		headers: {
@@ -90,6 +190,22 @@ export function clearTokenCache(clientId: string): void {
 }
 
 // ---------------------------------------------------------------------------
+// Safe error extraction (errors may contain circular socket/agent refs)
+// ---------------------------------------------------------------------------
+
+function safeErrorJson(error: unknown): JsonObject {
+	const e = error as Record<string, unknown>;
+	return {
+		message: (e.message as string) ?? 'Unknown error',
+		code: (e.code as string) ?? undefined,
+		httpCode: (e.httpCode as number) ?? undefined,
+		response: e.response
+			? { body: (e.response as Record<string, unknown>).body ?? undefined }
+			: undefined,
+	} as unknown as JsonObject;
+}
+
+// ---------------------------------------------------------------------------
 // Authenticated API request
 // ---------------------------------------------------------------------------
 
@@ -101,10 +217,11 @@ export async function ymcsApiRequest(
 	qs: IDataObject = {},
 ): Promise<IDataObject> {
 	const credentials = await this.getCredentials('yealinkYmcsApi');
-	const token = await getAccessToken(this, credentials);
 	const baseUrl = getBaseUrl(credentials.region as string);
 
-	const options: IHttpRequestOptions = {
+	const token = await getAccessToken(this, credentials);
+
+	const requestOptions: YmcsRequestOptions = {
 		method,
 		url: `${baseUrl}${endpoint}`,
 		headers: {
@@ -113,31 +230,31 @@ export async function ymcsApiRequest(
 			timestamp: String(Date.now()),
 			nonce: generateNonce(),
 		},
-		qs: Object.keys(qs).length ? qs : undefined,
+		qs: Object.keys(qs).length ? (qs as Record<string, string>) : undefined,
 	};
 
 	if (method !== 'GET' && method !== 'DELETE' && Object.keys(body).length) {
-		options.body = body;
+		requestOptions.body = body;
 	}
 
 	try {
-		return (await this.helpers.httpRequest(options)) as IDataObject;
+		return (await ymcsRawRequest(requestOptions)) as IDataObject;
 	} catch (error) {
 		// On 401, clear token cache and retry once
 		const statusCode = (error as { httpCode?: number }).httpCode;
 		if (statusCode === 401) {
 			clearTokenCache(credentials.clientId as string);
 			const newToken = await getAccessToken(this, credentials);
-			options.headers = {
-				...options.headers,
+			requestOptions.headers = {
+				...requestOptions.headers,
 				Authorization: `Bearer ${newToken}`,
 				timestamp: String(Date.now()),
 				nonce: generateNonce(),
 			};
 			try {
-				return (await this.helpers.httpRequest(options)) as IDataObject;
+				return (await ymcsRawRequest(requestOptions)) as IDataObject;
 			} catch (retryError) {
-				throw new NodeApiError(this.getNode(), retryError as JsonObject, {
+				throw new NodeApiError(this.getNode(), safeErrorJson(retryError), {
 					message: 'Authentication failed after token refresh',
 				});
 			}
@@ -150,12 +267,12 @@ export async function ymcsApiRequest(
 			const detailText = details
 				?.map((d) => `${d.field}: ${d.message}`)
 				.join('; ');
-			throw new NodeApiError(this.getNode(), error as JsonObject, {
+			throw new NodeApiError(this.getNode(), safeErrorJson(error), {
 				message: (errorBody.message as string) || 'YMCS API request failed',
 				description: detailText || `Error code: ${errorBody.code as string}`,
 			});
 		}
-		throw new NodeApiError(this.getNode(), error as JsonObject);
+		throw new NodeApiError(this.getNode(), safeErrorJson(error));
 	}
 }
 

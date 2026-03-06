@@ -36,11 +36,19 @@ export class YealinkYmcsApi implements ICredentialType {
 			description: 'The region where your Yealink YMCS enterprise is located',
 		},
 		{
+			displayName: 'Notice',
+			name: 'notice',
+			type: 'notice',
+			default: '',
+			description:
+				'Credentials cannot be auto-validated due to the Yealink API requiring legacy TLS renegotiation. To verify your credentials work, use the Device → Get Many operation after saving.',
+		},
+		{
 			displayName: 'Client ID',
 			name: 'clientId',
 			type: 'string',
 			default: '',
-			description: 'The Client ID from the YMCS platform',
+			description: 'The AccessKey ID from the YMCS API Service section',
 		},
 		{
 			displayName: 'Client Secret',
@@ -48,7 +56,7 @@ export class YealinkYmcsApi implements ICredentialType {
 			type: 'string',
 			typeOptions: { password: true },
 			default: '',
-			description: 'The Client Secret from the YMCS platform',
+			description: 'The AccessKey Secret from the YMCS API Service section',
 		},
 	];
 }
