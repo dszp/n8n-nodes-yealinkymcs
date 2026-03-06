@@ -1,0 +1,18 @@
+{
+	"node": "n8n-nodes-yealinkymcs.yealinkYmcs",
+	"nodeVersion": "0.0.1",
+	"codexVersion": "1.0",
+	"categories": ["Communication"],
+	"resources": {
+		"credentialDocumentation": [
+			{
+				"url": "https://support.yealink.com/"
+			}
+		],
+		"primaryDocumentation": [
+			{
+				"url": "https://support.yealink.com/"
+			}
+		]
+	}
+}
