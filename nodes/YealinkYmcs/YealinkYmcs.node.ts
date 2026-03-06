@@ -57,7 +57,7 @@ export class YealinkYmcs implements INodeType {
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
-		description: 'Interact with the Yealink Management Cloud Service API',
+		description: 'Connect to and control the Yealink YMCS and RPS platforms.',
 		defaults: {
 			name: 'Yealink YMCS',
 		},

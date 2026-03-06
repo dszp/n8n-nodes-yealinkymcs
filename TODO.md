@@ -2,6 +2,10 @@
 
 ## Future Enhancements
 
+### AI-Friendly Tool Descriptions
+
+Add detailed `action` descriptions to all operations optimized for AI agent tool use. When `usableAsTool: true` is set, n8n exposes each operation as a tool to AI agents. The current `action` descriptions are brief; they should be expanded with context about what data is returned, required inputs, and when to use each operation, so AI agents can select the right tool more reliably.
+
 ### Yealink RPS JSON API Node
 
 Add a separate node (`YealinkRps`) within this project for the Yealink RPS Management Platform JSON API, which is a completely different API from YMCS:
