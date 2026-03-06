@@ -14,7 +14,7 @@ Add a separate node (`YealinkRps`) within this project for the Yealink RPS Manag
   - `stringToSign` = HTTPMethod + "\n" + Headers + "\n" + API_URI + "\n" + FormattedQFStr
   - `Content-MD5` = Base64(MD5(body)) for POST requests
 - **Credentials**: Separate `YealinkRpsApi` credential type with AccessKey ID and AccessKey Secret
-- **Reference**: `Yealink_Json_API_for_RPS_Management_Platform.pdf` in project root
+- **Reference**: `api-reference/Yealink_Json_API_for_RPS_Management_Platform.pdf`
 
 #### Resources / Operations
 

@@ -65,6 +65,12 @@ npm run release      # Publish release via release-it
 - AU: `https://au-api.ymcs.yealink.com`
 - Selected in credential dialog via Region dropdown
 
+### Custom HTTPS Transport (SSL/TLS)
+- Yealink API servers require legacy TLS renegotiation which OpenSSL 3.x disables by default
+- Cannot use n8n's built-in `this.helpers.httpRequest()` (axios-based, no custom agent support)
+- Uses Node.js native `https.request()` with custom `https.Agent({ secureOptions: SSL_OP_LEGACY_SERVER_CONNECT })`
+- Credential auto-validation disabled (n8n's test mechanism uses its own HTTP client without the custom agent)
+
 ### GenericFunctions.ts
 - `getBaseUrl(region)` — maps region code to HTTPS base URL
 - `generateNonce()` — 32-char random hex string
@@ -99,7 +105,7 @@ Alarm, Configuration, Device, Device Accessory, Device Account, Device Control, 
 - ESLint flat config (`eslint.config.mjs`) with n8n node linter rules
 - Must pass lint before publishing: `npm run lint`
 - One suppression: `node-param-resource-with-plural-option` for "RPS" (acronym, not plural)
-- One suppression: `no-deprecated-workflow-functions` for credential test (ICredentialTestFunctions only exposes `helpers.request`)
+- Two suppressions: `no-restricted-imports` for `https` and `querystring` (required for custom TLS agent)
 
 ### TypeScript
 - Strict mode with all checks enabled
@@ -125,7 +131,8 @@ Detailed n8n development standards are in `.claude/rules/` (auto-loaded when edi
 
 - n8n Node Development: https://docs.n8n.io/integrations/creating-nodes/overview/
 - Yealink YMCS Support: https://support.yealink.com/
-- API Reference PDF: `Open API for Yealink Management Cloud Service V4X.pdf` (in project root)
+- YMCS API Reference: `api-reference/Open API for Yealink Management Cloud Service V4X.pdf`
+- RPS JSON API Reference: `api-reference/Yealink_Json_API_for_RPS_Management_Platform.pdf`
 
 ## Development Notes
 
