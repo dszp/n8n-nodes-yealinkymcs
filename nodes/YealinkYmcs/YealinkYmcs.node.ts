@@ -1,6 +1,9 @@
 import type {
+	ICredentialTestFunctions,
+	ICredentialsDecrypted,
 	IDataObject,
 	IExecuteFunctions,
+	INodeCredentialTestResult,
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
@@ -8,6 +11,7 @@ import type {
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 import {
+	getAccessToken,
 	ymcsApiRequest,
 	ymcsApiRequestAllItems,
 } from './GenericFunctions';
@@ -68,6 +72,7 @@ export class YealinkYmcs implements INodeType {
 			{
 				name: 'yealinkYmcsApi',
 				required: true,
+				testedBy: 'yealinkYmcsApiTest',
 			},
 		],
 		properties: [
@@ -128,6 +133,29 @@ export class YealinkYmcs implements INodeType {
 			...siteOperations,
 			...siteFields,
 		],
+	};
+
+	methods = {
+		credentialTest: {
+			async yealinkYmcsApiTest(
+				this: ICredentialTestFunctions,
+				credential: ICredentialsDecrypted,
+			): Promise<INodeCredentialTestResult> {
+				const credentials = credential.data as IDataObject;
+				try {
+					await getAccessToken(this, credentials);
+					return {
+						status: 'OK',
+						message: 'Connection successful',
+					};
+				} catch (error) {
+					return {
+						status: 'Error',
+						message: `Connection failed: ${(error as Error).message}`,
+					};
+				}
+			},
+		},
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {

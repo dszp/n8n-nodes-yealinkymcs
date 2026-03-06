@@ -29,6 +29,4 @@ Note: The YMCS API also has `/v2/rps/...` endpoints that overlap with some RPS J
 
 ## Current Known Issues
 
-- Credential auto-validation not possible due to Yealink API requiring legacy TLS renegotiation (SSL_OP_LEGACY_SERVER_CONNECT). Users must test credentials manually via Device > Get Many.
-- CLAUDE.md still references NetSapiens content and needs to be rewritten for Yealink YMCS.
-- version-management.md references NetSapiens paths/names.
+(No current known issues)
