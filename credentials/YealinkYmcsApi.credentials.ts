@@ -36,12 +36,11 @@ export class YealinkYmcsApi implements ICredentialType {
 			description: 'The region where your Yealink YMCS enterprise is located',
 		},
 		{
-			displayName: 'Notice',
+			displayName:
+				'Credentials cannot be auto-validated due to the Yealink API requiring legacy TLS renegotiation. To verify your credentials work, use the Device → Get Many operation after saving.',
 			name: 'notice',
 			type: 'notice',
 			default: '',
-			description:
-				'Credentials cannot be auto-validated due to the Yealink API requiring legacy TLS renegotiation. To verify your credentials work, use the Device → Get Many operation after saving.',
 		},
 		{
 			displayName: 'Client ID',

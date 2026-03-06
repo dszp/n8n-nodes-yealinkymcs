@@ -83,13 +83,7 @@ The `release-publish.yml` GitHub Action triggers automatically on the published 
 
 Monitor the action at: https://github.com/dszp/n8n-nodes-yealinkymcs/actions
 
-### 5. Clean up
-
-```bash
-rm -f dszp-n8n-nodes-yealinkymcs-*.tgz
-```
-
-### 6. Update dev branch (optional)
+### 5. Update dev branch (optional)
 
 ```bash
 git pull origin main
@@ -119,5 +113,6 @@ gh release create "v${VERSION}" \
 See [CHANGELOG](https://github.com/dszp/n8n-nodes-yealinkymcs/blob/v${VERSION}/CHANGELOG.md#${CHANGELOG_ANCHOR}---$(date +%Y-%m-%d)) for detailed changes.
 EOF
 )"
-rm -f dszp-n8n-nodes-yealinkymcs-*.tgz
 ```
+
+Note: `.tgz` files are kept locally for reference and are already `.gitignore`d.
