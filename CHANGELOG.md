@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.2] - 2026-03-06
+
+### Fixed
+
+- Fix empty notice in credential dialog — move notice text to `displayName` field where n8n renders it, so users see the TLS renegotiation warning instead of a blank yellow box.
+
 ## [0.1.1] - 2026-03-06
 
 ### Fixed
