@@ -3,8 +3,10 @@ import type {
 	ICredentialsDecrypted,
 	IDataObject,
 	IExecuteFunctions,
+	ILoadOptionsFunctions,
 	INodeCredentialTestResult,
 	INodeExecutionData,
+	INodeListSearchResult,
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
@@ -12,6 +14,7 @@ import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 import {
 	getAccessToken,
+	getCachedSiteList,
 	ymcsApiRequest,
 	ymcsApiRequestAllItems,
 } from './GenericFunctions';
@@ -154,6 +157,46 @@ export class YealinkYmcs implements INodeType {
 						message: `Connection failed: ${(error as Error).message}`,
 					};
 				}
+			},
+		},
+		listSearch: {
+			async getSiteList(
+				this: ILoadOptionsFunctions,
+				filter?: string,
+			): Promise<INodeListSearchResult> {
+				const sites = await getCachedSiteList(this);
+
+				// Group children by parentId, sort each group alphabetically
+				const byParent = new Map<string | null, IDataObject[]>();
+				for (const site of sites) {
+					const pid = (site.parentId as string | null) ?? null;
+					if (!byParent.has(pid)) byParent.set(pid, []);
+					byParent.get(pid)!.push(site);
+				}
+				for (const children of byParent.values()) {
+					children.sort((a, b) =>
+						(a.name as string).localeCompare(b.name as string),
+					);
+				}
+
+				const results: Array<{ name: string; value: string }> = [];
+				const lowerFilter = filter?.toLowerCase();
+
+				const traverse = (parentId: string | null, depth: number) => {
+					for (const site of byParent.get(parentId) ?? []) {
+						const siteName = site.name as string;
+						if (!lowerFilter || siteName.toLowerCase().includes(lowerFilter)) {
+							results.push({
+								name: '\u00a0\u00a0'.repeat(depth) + siteName,
+								value: site.id as string,
+							});
+						}
+						traverse(site.id as string, depth + 1);
+					}
+				};
+
+				traverse(null, 0);
+				return { results };
 			},
 		},
 	};
@@ -1035,10 +1078,10 @@ async function handleSiteOperation(
 ): Promise<IDataObject | IDataObject[]> {
 	if (operation === 'create') {
 		const siteName = this.getNodeParameter('name', i) as string;
-		const parentId = this.getNodeParameter('parentId', i) as string;
+		const parentId = this.getNodeParameter('parentId', i, '', { extractValue: true }) as string;
 		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
 		return await ymcsApiRequest.call(this, 'POST', '/v2/dm/sites', {
-			siteName,
+			name: siteName,
 			parentId,
 			...additionalFields,
 		});
