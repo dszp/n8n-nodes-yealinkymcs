@@ -1034,10 +1034,12 @@ async function handleSiteOperation(
 	i: number,
 ): Promise<IDataObject | IDataObject[]> {
 	if (operation === 'create') {
-		const siteName = this.getNodeParameter('siteName', i) as string;
+		const siteName = this.getNodeParameter('name', i) as string;
+		const parentId = this.getNodeParameter('parentId', i) as string;
 		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
 		return await ymcsApiRequest.call(this, 'POST', '/v2/dm/sites', {
 			siteName,
+			parentId,
 			...additionalFields,
 		});
 	}
