@@ -94,16 +94,62 @@ export const rpsFields: INodeProperties[] = [
 		displayName: 'Serial Number',
 		name: 'sn',
 		type: 'string',
-		required: true,
 		default: '',
 		placeholder: 'e.g. 1106312113402006',
-		description: 'SN code, maximum length 128 characters',
+		description:
+			'SN code (also known as Machine ID), maximum length 128 characters. Required for most accounts.',
 		displayOptions: {
 			show: {
 				resource: ['rps'],
 				operation: ['create'],
 			},
 		},
+	},
+	{
+		displayName: 'Allow Blank Serial Number',
+		name: 'snOverride',
+		type: 'boolean',
+		default: false,
+		description:
+			'Whether to allow the serial number to be empty. Enable only if Yealink support has configured your account to not require a serial number.',
+		displayOptions: {
+			show: {
+				resource: ['rps'],
+				operation: ['create'],
+			},
+		},
+	},
+	{
+		displayName: 'Server',
+		name: 'serverId',
+		type: 'resourceLocator',
+		default: { mode: 'list', value: '' },
+		description: 'The RPS server to associate with this device',
+		displayOptions: {
+			show: {
+				resource: ['rps'],
+				operation: ['create'],
+			},
+		},
+		modes: [
+			{
+				displayName: 'From List',
+				name: 'list',
+				type: 'list',
+				placeholder: 'Select a server...',
+				typeOptions: {
+					searchListMethod: 'getRpsServerList',
+					searchable: true,
+				},
+			},
+			{
+				displayName: 'By ID',
+				name: 'id',
+				type: 'string',
+				placeholder: 'e.g. b38dea23a4e6458188799833b72d950f',
+				hint: 'Enter the server ID directly, or drag a field from a previous node',
+			},
+		],
 	},
 	{
 		displayName: 'Additional Fields',
@@ -139,13 +185,6 @@ export const rpsFields: INodeProperties[] = [
 				type: 'string',
 				default: '',
 				description: 'Note, maximum length 256 characters',
-			},
-			{
-				displayName: 'Server ID',
-				name: 'serverId',
-				type: 'string',
-				default: '',
-				description: 'The server ID to associate with the device',
 			},
 			{
 				displayName: 'Unique Server URL',

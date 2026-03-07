@@ -14,6 +14,7 @@ import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 import {
 	getAccessToken,
+	getCachedRpsServerList,
 	getCachedSiteList,
 	ymcsApiRequest,
 	ymcsApiRequestAllItems,
@@ -160,6 +161,18 @@ export class YealinkYmcs implements INodeType {
 			},
 		},
 		listSearch: {
+			async getRpsServerList(
+				this: ILoadOptionsFunctions,
+				filter?: string,
+			): Promise<INodeListSearchResult> {
+				const servers = await getCachedRpsServerList(this);
+				const lowerFilter = filter?.toLowerCase();
+				const results = servers
+					.filter((s) => !lowerFilter || (s.name as string).toLowerCase().includes(lowerFilter))
+					.sort((a, b) => (a.name as string).localeCompare(b.name as string))
+					.map((s) => ({ name: s.name as string, value: s.id as string }));
+				return { results };
+			},
 			async getSiteList(
 				this: ILoadOptionsFunctions,
 				filter?: string,
@@ -913,13 +926,21 @@ async function handleRpsOperation(
 ): Promise<IDataObject | IDataObject[]> {
 	if (operation === 'create') {
 		const mac = this.getNodeParameter('mac', i) as string;
-		const serverUrl = this.getNodeParameter('serverUrl', i) as string;
+		const sn = this.getNodeParameter('sn', i, '') as string;
+		const snOverride = this.getNodeParameter('snOverride', i, false) as boolean;
+		if (!snOverride && !sn) {
+			throw new NodeOperationError(this.getNode(), 'Serial Number is required', {
+				itemIndex: i,
+				description:
+					"Enter the device Serial Number (Machine ID), or enable 'Allow Blank Serial Number' if your account has been configured by Yealink support to allow it.",
+			});
+		}
+		const serverId = this.getNodeParameter('serverId', i, '', { extractValue: true }) as string;
 		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
-		return await ymcsApiRequest.call(this, 'POST', '/v2/rps/devices', {
-			mac,
-			serverUrl,
-			...additionalFields,
-		});
+		const body: IDataObject = { mac };
+		if (sn) body.sn = sn;
+		if (serverId) body.serverId = serverId;
+		return await ymcsApiRequest.call(this, 'POST', '/v2/rps/devices', { ...body, ...additionalFields });
 	}
 
 	if (operation === 'createMany') {
@@ -929,8 +950,13 @@ async function handleRpsOperation(
 	}
 
 	if (operation === 'delete') {
-		const rpsDeviceId = this.getNodeParameter('rpsDeviceId', i) as string;
-		await ymcsApiRequest.call(this, 'DELETE', `/v2/rps/devices/${rpsDeviceId}`);
+		const deviceIdType = this.getNodeParameter('deviceIdType', i) as string;
+		const deviceIds = this.getNodeParameter('deviceIds', i) as string;
+		const ids = deviceIds.split(',').map((s: string) => s.trim()).filter(Boolean);
+		await ymcsApiRequest.call(this, 'POST', '/v2/rps/deleteDevices', {
+			ids,
+			idType: deviceIdType,
+		});
 		return { deleted: true };
 	}
 
