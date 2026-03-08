@@ -3,8 +3,10 @@ import type {
 	ICredentialsDecrypted,
 	IDataObject,
 	IExecuteFunctions,
+	ILoadOptionsFunctions,
 	INodeCredentialTestResult,
 	INodeExecutionData,
+	INodeListSearchResult,
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
@@ -12,6 +14,8 @@ import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 import {
 	getAccessToken,
+	getCachedRpsServerList,
+	getCachedSiteList,
 	ymcsApiRequest,
 	ymcsApiRequestAllItems,
 } from './GenericFunctions';
@@ -154,6 +158,58 @@ export class YealinkYmcs implements INodeType {
 						message: `Connection failed: ${(error as Error).message}`,
 					};
 				}
+			},
+		},
+		listSearch: {
+			async getRpsServerList(
+				this: ILoadOptionsFunctions,
+				filter?: string,
+			): Promise<INodeListSearchResult> {
+				const servers = await getCachedRpsServerList(this);
+				const lowerFilter = filter?.toLowerCase();
+				const results = servers
+					.filter((s) => !lowerFilter || (s.name as string).toLowerCase().includes(lowerFilter))
+					.sort((a, b) => (a.name as string).localeCompare(b.name as string))
+					.map((s) => ({ name: s.name as string, value: s.id as string }));
+				return { results };
+			},
+			async getSiteList(
+				this: ILoadOptionsFunctions,
+				filter?: string,
+			): Promise<INodeListSearchResult> {
+				const sites = await getCachedSiteList(this);
+
+				// Group children by parentId, sort each group alphabetically
+				const byParent = new Map<string | null, IDataObject[]>();
+				for (const site of sites) {
+					const pid = (site.parentId as string | null) ?? null;
+					if (!byParent.has(pid)) byParent.set(pid, []);
+					byParent.get(pid)!.push(site);
+				}
+				for (const children of byParent.values()) {
+					children.sort((a, b) =>
+						(a.name as string).localeCompare(b.name as string),
+					);
+				}
+
+				const results: Array<{ name: string; value: string }> = [];
+				const lowerFilter = filter?.toLowerCase();
+
+				const traverse = (parentId: string | null, depth: number) => {
+					for (const site of byParent.get(parentId) ?? []) {
+						const siteName = site.name as string;
+						if (!lowerFilter || siteName.toLowerCase().includes(lowerFilter)) {
+							results.push({
+								name: '\u00a0\u00a0'.repeat(depth) + siteName,
+								value: site.id as string,
+							});
+						}
+						traverse(site.id as string, depth + 1);
+					}
+				};
+
+				traverse(null, 0);
+				return { results };
 			},
 		},
 	};
@@ -870,13 +926,21 @@ async function handleRpsOperation(
 ): Promise<IDataObject | IDataObject[]> {
 	if (operation === 'create') {
 		const mac = this.getNodeParameter('mac', i) as string;
-		const serverUrl = this.getNodeParameter('serverUrl', i) as string;
+		const sn = this.getNodeParameter('sn', i, '') as string;
+		const snOverride = this.getNodeParameter('snOverride', i, false) as boolean;
+		if (!snOverride && !sn) {
+			throw new NodeOperationError(this.getNode(), 'Serial Number is required', {
+				itemIndex: i,
+				description:
+					"Enter the device Serial Number (Machine ID), or enable 'Allow Blank Serial Number' if your account has been configured by Yealink support to allow it.",
+			});
+		}
+		const serverId = this.getNodeParameter('serverId', i, '', { extractValue: true }) as string;
 		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
-		return await ymcsApiRequest.call(this, 'POST', '/v2/rps/devices', {
-			mac,
-			serverUrl,
-			...additionalFields,
-		});
+		const body: IDataObject = { mac };
+		if (sn) body.sn = sn;
+		if (serverId) body.serverId = serverId;
+		return await ymcsApiRequest.call(this, 'POST', '/v2/rps/devices', { ...body, ...additionalFields });
 	}
 
 	if (operation === 'createMany') {
@@ -886,8 +950,13 @@ async function handleRpsOperation(
 	}
 
 	if (operation === 'delete') {
-		const rpsDeviceId = this.getNodeParameter('rpsDeviceId', i) as string;
-		await ymcsApiRequest.call(this, 'DELETE', `/v2/rps/devices/${rpsDeviceId}`);
+		const deviceIdType = this.getNodeParameter('deviceIdType', i) as string;
+		const deviceIds = this.getNodeParameter('deviceIds', i) as string;
+		const ids = deviceIds.split(',').map((s: string) => s.trim()).filter(Boolean);
+		await ymcsApiRequest.call(this, 'POST', '/v2/rps/deleteDevices', {
+			ids,
+			idType: deviceIdType,
+		});
 		return { deleted: true };
 	}
 
@@ -910,13 +979,15 @@ async function handleRpsOperation(
 
 	if (operation === 'update') {
 		const rpsDeviceId = this.getNodeParameter('rpsDeviceId', i) as string;
+		const serverId = this.getNodeParameter('serverId', i, '', { extractValue: true }) as string;
+		const authName = this.getNodeParameter('authName', i, '') as string;
+		const password = this.getNodeParameter('password', i, '') as string;
 		const updateFields = this.getNodeParameter('updateFields', i, {}) as IDataObject;
-		return await ymcsApiRequest.call(
-			this,
-			'PATCH',
-			`/v2/rps/devices/${rpsDeviceId}`,
-			updateFields,
-		);
+		const body: IDataObject = { ...updateFields };
+		if (serverId) body.serverId = serverId;
+		if (authName) body.authName = authName;
+		if (password) body.password = password;
+		return await ymcsApiRequest.call(this, 'PATCH', `/v2/rps/devices/${rpsDeviceId}`, body);
 	}
 
 	if (operation === 'getServers') {
@@ -936,12 +1007,15 @@ async function handleRpsOperation(
 	}
 
 	if (operation === 'createServer') {
-		const serverUrl = this.getNodeParameter('serverUrl', i) as string;
+		const serverName = this.getNodeParameter('serverName', i) as string;
+		const url = this.getNodeParameter('url', i) as string;
+		const authName = this.getNodeParameter('authName', i, '') as string;
+		const password = this.getNodeParameter('password', i, '') as string;
 		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
-		return await ymcsApiRequest.call(this, 'POST', '/v2/rps/servers', {
-			serverUrl,
-			...additionalFields,
-		});
+		const body: IDataObject = { serverName, url };
+		if (authName) body.authName = authName;
+		if (password) body.password = password;
+		return await ymcsApiRequest.call(this, 'POST', '/v2/rps/servers', { ...body, ...additionalFields });
 	}
 
 	if (operation === 'deleteServer') {
@@ -1034,10 +1108,12 @@ async function handleSiteOperation(
 	i: number,
 ): Promise<IDataObject | IDataObject[]> {
 	if (operation === 'create') {
-		const siteName = this.getNodeParameter('siteName', i) as string;
+		const siteName = this.getNodeParameter('name', i) as string;
+		const parentId = this.getNodeParameter('parentId', i, '', { extractValue: true }) as string;
 		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
 		return await ymcsApiRequest.call(this, 'POST', '/v2/dm/sites', {
-			siteName,
+			name: siteName,
+			parentId,
 			...additionalFields,
 		});
 	}

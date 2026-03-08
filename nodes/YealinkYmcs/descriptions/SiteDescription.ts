@@ -66,17 +66,37 @@ export const siteFields: INodeProperties[] = [
 		},
 	},
 	{
-		displayName: 'Parent Site ID',
+		displayName: 'Parent Site',
 		name: 'parentId',
-		type: 'string',
+		type: 'resourceLocator',
+		default: { mode: 'list', value: '' },
 		required: true,
-		default: '',
+		description: 'The parent site under which to create the new site',
 		displayOptions: {
 			show: {
 				resource: ['site'],
 				operation: ['create'],
 			},
 		},
+		modes: [
+			{
+				displayName: 'From List',
+				name: 'list',
+				type: 'list',
+				placeholder: 'Select a parent site...',
+				typeOptions: {
+					searchListMethod: 'getSiteList',
+					searchable: true,
+				},
+			},
+			{
+				displayName: 'By ID',
+				name: 'id',
+				type: 'string',
+				placeholder: 'e.g. 34c6f6b5037d4708a77d14ae4b661379',
+				hint: 'Enter the site ID directly, or drag a field from a previous node',
+			},
+		],
 	},
 	{
 		displayName: 'Additional Fields',
@@ -93,7 +113,7 @@ export const siteFields: INodeProperties[] = [
 		options: [
 			{
 				displayName: 'Description',
-				name: 'Description',
+				name: 'description',
 				type: 'string',
 				default: '',
 				description: 'Description, maximum length 1024 characters',
@@ -226,7 +246,7 @@ export const siteFields: INodeProperties[] = [
 		options: [
 			{
 				displayName: 'Description',
-				name: 'Description',
+				name: 'description',
 				type: 'string',
 				default: '',
 				description: 'Description, maximum length 1024 characters',

@@ -15,6 +15,86 @@ import type {
 import { NodeApiError } from 'n8n-workflow';
 
 // ---------------------------------------------------------------------------
+// Site list cache (used by the Parent Site resource locator)
+// ---------------------------------------------------------------------------
+
+const SITE_LIST_CACHE_TTL = 15 * 60 * 1000; // 15 minutes
+
+interface CachedSiteList {
+	sites: IDataObject[];
+	expiresAt: number;
+}
+
+const siteListCache = new Map<string, CachedSiteList>();
+
+export async function getCachedSiteList(context: ILoadOptionsFunctions): Promise<IDataObject[]> {
+	const credentials = await context.getCredentials('yealinkYmcsApi');
+	const cacheKey = credentials.clientId as string;
+
+	const cached = siteListCache.get(cacheKey);
+	if (cached && cached.expiresAt > Date.now()) {
+		return cached.sites;
+	}
+
+	// Paginate through all sites
+	const sites: IDataObject[] = [];
+	const pageSize = 500;
+	let skip = 0;
+	let total: number | null = null;
+
+	do {
+		const response: IDataObject = await ymcsApiRequest.call(context, 'POST', '/v2/dm/listSites', {
+			skip,
+			limit: pageSize,
+			autoCount: total === null,
+		});
+		if (total === null) total = (response.total as number) ?? 0;
+		const items = (response.data as IDataObject[]) ?? [];
+		sites.push(...items);
+		skip += items.length;
+		if (items.length === 0) break;
+	} while (skip < total!);
+
+	siteListCache.set(cacheKey, { sites, expiresAt: Date.now() + SITE_LIST_CACHE_TTL });
+	return sites;
+}
+
+// ---------------------------------------------------------------------------
+// RPS server list cache (used by the Server resource locator on RPS Create)
+// ---------------------------------------------------------------------------
+
+const rpsServerListCache = new Map<string, CachedSiteList>();
+
+export async function getCachedRpsServerList(context: ILoadOptionsFunctions): Promise<IDataObject[]> {
+	const credentials = await context.getCredentials('yealinkYmcsApi');
+	const cacheKey = credentials.clientId as string;
+
+	const cached = rpsServerListCache.get(cacheKey);
+	if (cached && cached.expiresAt > Date.now()) return cached.sites;
+
+	const servers: IDataObject[] = [];
+	const pageSize = 500;
+	let skip = 0;
+	let total: number | null = null;
+
+	do {
+		const response: IDataObject = await ymcsApiRequest.call(context, 'POST', '/v2/rps/listServers', {
+			skip,
+			limit: pageSize,
+			autoCount: total === null,
+		});
+		if (total === null) total = (response.total as number) ?? 0;
+		const items = (response.data as IDataObject[]) ?? [];
+		servers.push(...items);
+		skip += items.length;
+		if (items.length === 0) break;
+	} while (skip < total!);
+
+	rpsServerListCache.set(cacheKey, { sites: servers, expiresAt: Date.now() + SITE_LIST_CACHE_TTL });
+	return servers;
+}
+
+// ---------------------------------------------------------------------------
 // Custom HTTPS agent for Yealink YMCS API servers.
 // The Yealink API servers require TLS renegotiation which OpenSSL 3.x
 // disables by default. We use a dedicated agent with SSL_OP_LEGACY_SERVER_CONNECT
