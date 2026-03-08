@@ -60,7 +60,7 @@ export async function getCachedSiteList(context: ILoadOptionsFunctions): Promise
 }
 
 // ---------------------------------------------------------------------------
-// RPS server list cache (used by the Server resource locator on RPS Create)
+// RPS server list cache (used by the Server resource locator on RPS Create/Update)
 // ---------------------------------------------------------------------------
 
 const rpsServerListCache = new Map<string, CachedSiteList>();
@@ -92,6 +92,31 @@ export async function getCachedRpsServerList(context: ILoadOptionsFunctions): Pr
 
 	rpsServerListCache.set(cacheKey, { sites: servers, expiresAt: Date.now() + SITE_LIST_CACHE_TTL });
 	return servers;
+}
+
+// ---------------------------------------------------------------------------
+// Model list cache (used by the Model resource locator on Device/Firmware)
+// ---------------------------------------------------------------------------
+
+const modelListCache = new Map<string, CachedSiteList>();
+
+export async function getCachedModelList(
+	context: ILoadOptionsFunctions,
+	deviceType: 1 | 3,
+): Promise<IDataObject[]> {
+	const credentials = await context.getCredentials('yealinkYmcsApi');
+	const cacheKey = `${credentials.clientId as string}:${deviceType}`;
+
+	const cached = modelListCache.get(cacheKey);
+	if (cached && cached.expiresAt > Date.now()) return cached.sites;
+
+	const response = await ymcsApiRequest.call(context, 'GET', '/v2/dm/models', {}, { deviceType });
+	const models =
+		(response.data as IDataObject[]) ??
+		(Array.isArray(response) ? (response as IDataObject[]) : []);
+
+	modelListCache.set(cacheKey, { sites: models, expiresAt: Date.now() + SITE_LIST_CACHE_TTL });
+	return models;
 }
 
 // ---------------------------------------------------------------------------

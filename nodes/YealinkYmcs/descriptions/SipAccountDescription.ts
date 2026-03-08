@@ -124,6 +124,64 @@ export const sipAccountFields: INodeProperties[] = [
 		},
 	},
 	{
+		displayName: 'Display Name',
+		name: 'displayName',
+		type: 'string',
+		default: '',
+		description: 'Display name, maximum length 128 characters',
+		displayOptions: {
+			show: {
+				resource: ['sipAccount'],
+				operation: ['create'],
+			},
+		},
+	},
+	{
+		displayName: 'Label',
+		name: 'label',
+		type: 'string',
+		default: '',
+		description: 'Label, maximum length 128 characters',
+		displayOptions: {
+			show: {
+				resource: ['sipAccount'],
+				operation: ['create'],
+			},
+		},
+	},
+	{
+		displayName: 'Site',
+		name: 'siteId',
+		type: 'resourceLocator',
+		default: { mode: 'list', value: '' },
+		description: 'The site to assign the account to',
+		displayOptions: {
+			show: {
+				resource: ['sipAccount'],
+				operation: ['create'],
+			},
+		},
+		modes: [
+			{
+				displayName: 'From List',
+				name: 'list',
+				type: 'list',
+				placeholder: 'Select a site...',
+				typeOptions: {
+					searchListMethod: 'getSiteList',
+					searchable: true,
+				},
+			},
+			{
+				displayName: 'By ID',
+				name: 'id',
+				type: 'string',
+				placeholder: 'e.g. 34c6f6b5037d4708a77d14ae4b661379',
+				hint: 'Enter the site ID directly, or drag a field from a previous node',
+			},
+		],
+	},
+	{
 		displayName: 'Additional Fields',
 		name: 'additionalFields',
 		type: 'collection',
@@ -136,20 +194,6 @@ export const sipAccountFields: INodeProperties[] = [
 			},
 		},
 		options: [
-			{
-				displayName: 'Display Name',
-				name: 'displayName',
-				type: 'string',
-				default: '',
-				description: 'Display name, maximum length 128 characters',
-			},
-			{
-				displayName: 'Label',
-				name: 'label',
-				type: 'string',
-				default: '',
-				description: 'Label, maximum length 128 characters',
-			},
 			{
 				displayName: 'Remark',
 				name: 'remark',
@@ -174,13 +218,6 @@ export const sipAccountFields: INodeProperties[] = [
 					maxValue: 65535,
 				},
 				description: 'Secondary SIP server port (0-65535)',
-			},
-			{
-				displayName: 'Site ID',
-				name: 'siteId',
-				type: 'string',
-				default: '',
-				description: 'The site ID to assign the account to',
 			},
 		],
 	},

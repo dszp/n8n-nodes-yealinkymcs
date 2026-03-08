@@ -256,14 +256,22 @@ export const deviceFields: INodeProperties[] = [
 		},
 	},
 	{
-		displayName: 'Device IDs',
-		name: 'deviceIds',
-		type: 'string',
+		displayName: 'Use MAC Address or Device ID Type',
+		name: 'deviceIdType',
+		type: 'options',
 		required: true,
-		default: '',
-		placeholder: 'e.g. id1,id2,id3',
-		description:
-			'Comma-separated list of device identifiers to delete, maximum length 200 characters',
+		default: 'mac',
+		options: [
+			{
+				name: 'MAC Address',
+				value: 'mac',
+			},
+			{
+				name: 'Device ID',
+				value: 'id',
+			},
+		],
+		description: 'The type of device identifier used',
 		displayOptions: {
 			show: {
 				resource: ['device'],
@@ -272,21 +280,14 @@ export const deviceFields: INodeProperties[] = [
 		},
 	},
 	{
-		displayName: 'Device ID Type',
-		name: 'deviceIdType',
-		type: 'options',
-		default: 'id',
-		options: [
-			{
-				name: 'Device ID',
-				value: 'id',
-			},
-			{
-				name: 'MAC Address',
-				value: 'mac',
-			},
-		],
-		description: 'The type of device identifier used in the device IDs field',
+		displayName: 'Identifiers of Selected Type',
+		name: 'deviceIds',
+		type: 'string',
+		required: true,
+		default: '',
+		placeholder: 'e.g. 001565bbb1a9,001567',
+		description:
+			'Comma-separated list of device identifiers to delete, maximum length 200 characters',
 		displayOptions: {
 			show: {
 				resource: ['device'],
@@ -335,6 +336,33 @@ export const deviceFields: INodeProperties[] = [
 	//         device: getAll
 	// ----------------------------------
 	{
+		displayName: 'Device Type',
+		name: 'deviceType',
+		type: 'options',
+		default: 0,
+		options: [
+			{
+				name: 'All',
+				value: 0,
+			},
+			{
+				name: 'Phone Device',
+				value: 1,
+			},
+			{
+				name: 'Room Device',
+				value: 3,
+			},
+		],
+		description: 'Filter by device type. Defaults to returning all device types.',
+		displayOptions: {
+			show: {
+				resource: ['device'],
+				operation: ['getAll'],
+			},
+		},
+	},
+	{
 		displayName: 'Return All',
 		name: 'returnAll',
 		type: 'boolean',
@@ -364,6 +392,71 @@ export const deviceFields: INodeProperties[] = [
 				returnAll: [false],
 			},
 		},
+	},
+	{
+		displayName: 'Site Including Child(ren)',
+		name: 'siteId',
+		type: 'resourceLocator',
+		default: { mode: 'list', value: '' },
+		description:
+			'Filter by site. Returns devices in the selected site and any of its child sites.',
+		displayOptions: {
+			show: {
+				resource: ['device'],
+				operation: ['getAll'],
+			},
+		},
+		modes: [
+			{
+				displayName: 'From List',
+				name: 'list',
+				type: 'list',
+				placeholder: 'Select a site...',
+				typeOptions: {
+					searchListMethod: 'getSiteList',
+					searchable: true,
+				},
+			},
+			{
+				displayName: 'By ID',
+				name: 'id',
+				type: 'string',
+				placeholder: 'e.g. 34c6f6b5037d4708a77d14ae4b661379',
+				hint: 'Enter the site ID directly, or drag a field from a previous node',
+			},
+		],
+	},
+	{
+		displayName: 'Model',
+		name: 'modelId',
+		type: 'resourceLocator',
+		default: { mode: 'list', value: '' },
+		description: 'Filter by device model. The list shown depends on the selected Device Type.',
+		displayOptions: {
+			show: {
+				resource: ['device'],
+				operation: ['getAll'],
+			},
+		},
+		modes: [
+			{
+				displayName: 'From List',
+				name: 'list',
+				type: 'list',
+				placeholder: 'Select a model...',
+				typeOptions: {
+					searchListMethod: 'getModelList',
+					searchable: true,
+				},
+			},
+			{
+				displayName: 'By ID',
+				name: 'id',
+				type: 'string',
+				placeholder: 'e.g. model-id-here',
+				hint: 'Enter the model ID directly, or drag a field from a previous node',
+			},
+		],
 	},
 	{
 		displayName: 'Filters',
@@ -421,28 +514,6 @@ export const deviceFields: INodeProperties[] = [
 				description: 'Filter by device online status',
 			},
 			{
-				displayName: 'Device Type',
-				name: 'deviceType',
-				type: 'options',
-				default: 1,
-				options: [
-					{
-						name: 'All',
-						value: 0,
-					},
-					{
-						name: 'Phone Device',
-						value: 1,
-					},
-					{
-						name: 'Room Device',
-						value: 3,
-					},
-				],
-				description:
-					'Filter by device type. If not specified, all device types are returned.',
-			},
-			{
 				displayName: 'MAC Address',
 				name: 'mac',
 				type: 'string',
@@ -450,20 +521,6 @@ export const deviceFields: INodeProperties[] = [
 				placeholder: 'e.g. 00:15:65:bb:b1:a9',
 				description:
 					'Device MAC fuzzy search keyword, maximum length 17. Supports ":" or "-" separators.',
-			},
-			{
-				displayName: 'Model ID',
-				name: 'modelId',
-				type: 'string',
-				default: '',
-				description: 'Filter by device model ID',
-			},
-			{
-				displayName: 'Site ID',
-				name: 'siteId',
-				type: 'string',
-				default: '',
-				description: 'Filter by site ID',
 			},
 		],
 	},

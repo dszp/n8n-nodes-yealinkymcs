@@ -77,6 +77,38 @@ export const firmwareFields: INodeProperties[] = [
 		},
 	},
 	{
+		displayName: 'Model',
+		name: 'modelId',
+		type: 'resourceLocator',
+		default: { mode: 'list', value: '' },
+		description: 'Filter by device model',
+		displayOptions: {
+			show: {
+				resource: ['firmware'],
+				operation: ['getAllCustom'],
+			},
+		},
+		modes: [
+			{
+				displayName: 'From List',
+				name: 'list',
+				type: 'list',
+				placeholder: 'Select a model...',
+				typeOptions: {
+					searchListMethod: 'getModelList',
+					searchable: true,
+				},
+			},
+			{
+				displayName: 'By ID',
+				name: 'id',
+				type: 'string',
+				placeholder: 'e.g. model-id-here',
+				hint: 'Enter the model ID directly, or drag a field from a previous node',
+			},
+		],
+	},
+	{
 		displayName: 'Filters',
 		name: 'filters',
 		type: 'collection',
@@ -123,13 +155,6 @@ export const firmwareFields: INodeProperties[] = [
 				],
 				description: 'Filter by firmware type',
 			},
-			{
-				displayName: 'Model ID',
-				name: 'modelId',
-				type: 'string',
-				default: '',
-				description: 'Filter by firmware model ID',
-			},
 		],
 	},
 
@@ -137,18 +162,37 @@ export const firmwareFields: INodeProperties[] = [
 	//         firmware: getAllOfficial
 	// ----------------------------------
 	{
-		displayName: 'Model ID',
+		displayName: 'Model',
 		name: 'modelId',
-		type: 'string',
+		type: 'resourceLocator',
+		default: { mode: 'list', value: '' },
 		required: true,
-		default: '',
-		description: 'The firmware model ID to list official firmware versions for',
+		description: 'The model to list official firmware versions for',
 		displayOptions: {
 			show: {
 				resource: ['firmware'],
 				operation: ['getAllOfficial'],
 			},
 		},
+		modes: [
+			{
+				displayName: 'From List',
+				name: 'list',
+				type: 'list',
+				placeholder: 'Select a model...',
+				typeOptions: {
+					searchListMethod: 'getModelList',
+					searchable: true,
+				},
+			},
+			{
+				displayName: 'By ID',
+				name: 'id',
+				type: 'string',
+				placeholder: 'e.g. model-id-here',
+				hint: 'Enter the model ID directly, or drag a field from a previous node',
+			},
+		],
 	},
 	{
 		displayName: 'Return All',

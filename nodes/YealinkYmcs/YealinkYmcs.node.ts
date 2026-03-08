@@ -14,6 +14,7 @@ import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 import {
 	getAccessToken,
+	getCachedModelList,
 	getCachedRpsServerList,
 	getCachedSiteList,
 	ymcsApiRequest,
@@ -168,9 +169,52 @@ export class YealinkYmcs implements INodeType {
 				const servers = await getCachedRpsServerList(this);
 				const lowerFilter = filter?.toLowerCase();
 				const results = servers
-					.filter((s) => !lowerFilter || (s.name as string).toLowerCase().includes(lowerFilter))
-					.sort((a, b) => (a.name as string).localeCompare(b.name as string))
-					.map((s) => ({ name: s.name as string, value: s.id as string }));
+					.map((s) => {
+						const name = (s.serverName as string) ?? (s.name as string) ?? '';
+						const url = (s.url as string) ?? '';
+						const label = url ? `${name} (${url})` : name;
+						return { name: label, value: s.id as string };
+					})
+					.filter((r) => !lowerFilter || r.name.toLowerCase().includes(lowerFilter))
+					.sort((a, b) => a.name.localeCompare(b.name));
+				return { results };
+			},
+			async getModelList(
+				this: ILoadOptionsFunctions,
+				filter?: string,
+			): Promise<INodeListSearchResult> {
+				let deviceType = 0;
+				try {
+					const dt = this.getCurrentNodeParameter('deviceType');
+					deviceType = typeof dt === 'number' ? dt : 0;
+				} catch {
+					// deviceType not available in this context, load all models
+				}
+
+				let models: IDataObject[] = [];
+				if (deviceType === 1) {
+					models = await getCachedModelList(this, 1);
+				} else if (deviceType === 3) {
+					models = await getCachedModelList(this, 3);
+				} else {
+					const [phoneModels, roomModels] = await Promise.all([
+						getCachedModelList(this, 1),
+						getCachedModelList(this, 3),
+					]);
+					models = [
+						...phoneModels,
+						...roomModels.map((m) => ({ ...m, _suffix: ' (Room)' })),
+					];
+				}
+
+				const lowerFilter = filter?.toLowerCase();
+				const results = models
+					.map((m) => ({
+						name: (m.name as string ?? '') + ((m._suffix as string) ?? ''),
+						value: m.id as string,
+					}))
+					.filter((r) => !lowerFilter || r.name.toLowerCase().includes(lowerFilter))
+					.sort((a, b) => a.name.localeCompare(b.name));
 				return { results };
 			},
 			async getSiteList(
@@ -313,15 +357,10 @@ export class YealinkYmcs implements INodeType {
 					if (operation === 'getId') {
 						const mac = this.getNodeParameter('mac', i) as string;
 						const deviceType = this.getNodeParameter('deviceType', i) as number;
-						const additionalFields = this.getNodeParameter(
-							'additionalFields',
-							i,
-							{},
-						) as IDataObject;
 						const body: IDataObject = {
 							deviceType,
 							deviceIds: [mac],
-							deviceIdType: (additionalFields.deviceIdType as string) || 'mac',
+							deviceIdType: 'mac',
 						};
 						responseData = await ymcsApiRequest.call(this, 'POST', '/v2/dm/deviceId', body);
 					} else {
@@ -504,8 +543,15 @@ async function handleDeviceOperation(
 
 	if (operation === 'getAll') {
 		const returnAll = this.getNodeParameter('returnAll', i) as boolean;
+		const deviceType = this.getNodeParameter('deviceType', i, 0) as number;
+		const siteId = this.getNodeParameter('siteId', i, '', { extractValue: true }) as string;
+		const modelId = this.getNodeParameter('modelId', i, '', { extractValue: true }) as string;
 		const filters = this.getNodeParameter('filters', i, {}) as IDataObject;
-		const body: IDataObject = { filter: filters };
+		const filterBody: IDataObject = { ...filters };
+		if (deviceType) filterBody.deviceType = deviceType;
+		if (siteId) filterBody.siteId = siteId;
+		if (modelId) filterBody.modelId = modelId;
+		const body: IDataObject = { filter: filterBody };
 		if (returnAll) {
 			return await ymcsApiRequestAllItems.call(this, '/v2/dm/listDevices', body, 'data', undefined, 100);
 		}
@@ -850,8 +896,8 @@ async function handleFirmwareOperation(
 ): Promise<IDataObject | IDataObject[]> {
 	if (operation === 'getAllOfficial') {
 		const returnAll = this.getNodeParameter('returnAll', i) as boolean;
-		const modelId = this.getNodeParameter('modelId', i) as string;
-		const body: IDataObject = { modelId };
+		const modelId = this.getNodeParameter('modelId', i, '', { extractValue: true }) as string;
+		const body: IDataObject = { filter: { ...(modelId ? { modelId } : {}) } };
 		if (returnAll) {
 			return await ymcsApiRequestAllItems.call(
 				this,
@@ -871,8 +917,11 @@ async function handleFirmwareOperation(
 
 	if (operation === 'getAllCustom') {
 		const returnAll = this.getNodeParameter('returnAll', i) as boolean;
+		const modelId = this.getNodeParameter('modelId', i, '', { extractValue: true }) as string;
 		const filters = this.getNodeParameter('filters', i, {}) as IDataObject;
-		const body: IDataObject = { filter: filters };
+		const filterBody: IDataObject = { ...filters };
+		if (modelId) filterBody.modelId = modelId;
+		const body: IDataObject = { filter: filterBody };
 		if (returnAll) {
 			return await ymcsApiRequestAllItems.call(this, '/v2/dm/listFirmwares', body);
 		}
@@ -1025,7 +1074,7 @@ async function handleRpsOperation(
 	}
 
 	if (operation === 'updateServer') {
-		const rpsServerId = this.getNodeParameter('rpsServerId', i) as string;
+		const rpsServerId = this.getNodeParameter('rpsServerId', i, '', { extractValue: true }) as string;
 		const updateFields = this.getNodeParameter('updateFields', i, {}) as IDataObject;
 		return await ymcsApiRequest.call(
 			this,
@@ -1051,15 +1100,15 @@ async function handleSipAccountOperation(
 		const password = this.getNodeParameter('password', i) as string;
 		const sipServer1Host = this.getNodeParameter('sipServer1Host', i) as string;
 		const sipServer1Port = this.getNodeParameter('sipServer1Port', i) as number;
+		const displayNameField = this.getNodeParameter('displayName', i, '') as string;
+		const label = this.getNodeParameter('label', i, '') as string;
+		const siteId = this.getNodeParameter('siteId', i, '', { extractValue: true }) as string;
 		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
-		return await ymcsApiRequest.call(this, 'POST', '/v2/dm/sipAccounts', {
-			registerName,
-			username,
-			password,
-			sipServer1Host,
-			sipServer1Port,
-			...additionalFields,
-		});
+		const body: IDataObject = { registerName, username, password, sipServer1Host, sipServer1Port };
+		if (displayNameField) body.displayName = displayNameField;
+		if (label) body.label = label;
+		if (siteId) body.siteId = siteId;
+		return await ymcsApiRequest.call(this, 'POST', '/v2/dm/sipAccounts', { ...body, ...additionalFields });
 	}
 
 	if (operation === 'delete') {
@@ -1110,22 +1159,20 @@ async function handleSiteOperation(
 	if (operation === 'create') {
 		const siteName = this.getNodeParameter('name', i) as string;
 		const parentId = this.getNodeParameter('parentId', i, '', { extractValue: true }) as string;
-		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
-		return await ymcsApiRequest.call(this, 'POST', '/v2/dm/sites', {
-			name: siteName,
-			parentId,
-			...additionalFields,
-		});
+		const description = this.getNodeParameter('description', i, '') as string;
+		const body: IDataObject = { name: siteName, parentId };
+		if (description) body.description = description;
+		return await ymcsApiRequest.call(this, 'POST', '/v2/dm/sites', body);
 	}
 
 	if (operation === 'delete') {
-		const siteId = this.getNodeParameter('siteId', i) as string;
+		const siteId = this.getNodeParameter('siteId', i, '', { extractValue: true }) as string;
 		await ymcsApiRequest.call(this, 'DELETE', `/v2/dm/sites/${siteId}`);
 		return { deleted: true };
 	}
 
 	if (operation === 'get') {
-		const siteId = this.getNodeParameter('siteId', i) as string;
+		const siteId = this.getNodeParameter('siteId', i, '', { extractValue: true }) as string;
 		return await ymcsApiRequest.call(this, 'GET', `/v2/dm/sites/${siteId}`);
 	}
 
@@ -1147,9 +1194,18 @@ async function handleSiteOperation(
 	}
 
 	if (operation === 'update') {
-		const siteId = this.getNodeParameter('siteId', i) as string;
+		const siteId = this.getNodeParameter('siteId', i, '', { extractValue: true }) as string;
+		const parentId = this.getNodeParameter('parentId', i, '', { extractValue: true }) as string;
 		const updateFields = this.getNodeParameter('updateFields', i, {}) as IDataObject;
-		return await ymcsApiRequest.call(this, 'PATCH', `/v2/dm/sites/${siteId}`, updateFields);
+		if (parentId) updateFields.parentId = parentId;
+		if (Object.keys(updateFields).length === 0) {
+			throw new NodeOperationError(this.getNode(), 'No fields provided to update', {
+				itemIndex: i,
+				description: "Set a 'Parent Site' or add at least one field to 'Update Fields' (Site Name or Description).",
+			});
+		}
+		const response = await ymcsApiRequest.call(this, 'PATCH', `/v2/dm/sites/${siteId}`, updateFields);
+		return response && Object.keys(response).length > 0 ? response : { updated: true };
 	}
 
 	throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`, {

@@ -66,27 +66,4 @@ export const deviceIdentificationFields: INodeProperties[] = [
 			},
 		},
 	},
-	{
-		displayName: 'Additional Fields',
-		name: 'additionalFields',
-		type: 'collection',
-		placeholder: 'Add Field',
-		default: {},
-		displayOptions: {
-			show: {
-				resource: ['deviceIdentification'],
-				operation: ['getId'],
-			},
-		},
-		options: [
-			{
-				displayName: 'Device ID Type',
-				name: 'deviceIdType',
-				type: 'string',
-				default: 'mac',
-				description:
-					'The type of device identifier. Defaults to "mac".',
-			},
-		],
-	},
 ];
