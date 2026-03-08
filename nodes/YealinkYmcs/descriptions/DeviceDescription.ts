@@ -543,6 +543,38 @@ export const deviceFields: INodeProperties[] = [
 		},
 	},
 	{
+		displayName: 'Site',
+		name: 'siteId',
+		type: 'resourceLocator',
+		default: { mode: 'list', value: '' },
+		description: 'Assign the device to a site',
+		displayOptions: {
+			show: {
+				resource: ['device'],
+				operation: ['update'],
+			},
+		},
+		modes: [
+			{
+				displayName: 'From List',
+				name: 'list',
+				type: 'list',
+				placeholder: 'Select a site...',
+				typeOptions: {
+					searchListMethod: 'getSiteList',
+					searchable: true,
+				},
+			},
+			{
+				displayName: 'By ID',
+				name: 'id',
+				type: 'string',
+				placeholder: 'e.g. 34c6f6b5037d4708a77d14ae4b661379',
+				hint: 'Enter the site ID directly, or drag a field from a previous node',
+			},
+		],
+	},
+	{
 		displayName: 'Update Fields',
 		name: 'updateFields',
 		type: 'collection',
@@ -561,13 +593,6 @@ export const deviceFields: INodeProperties[] = [
 				type: 'string',
 				default: '',
 				description: 'Device name, maximum length 128 characters',
-			},
-			{
-				displayName: 'Site ID',
-				name: 'siteId',
-				type: 'string',
-				default: '',
-				description: 'The site ID to assign the device to',
 			},
 		],
 	},

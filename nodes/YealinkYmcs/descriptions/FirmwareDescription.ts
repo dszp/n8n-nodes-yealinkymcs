@@ -77,11 +77,29 @@ export const firmwareFields: INodeProperties[] = [
 		},
 	},
 	{
+		displayName: 'Device Type',
+		name: 'deviceType',
+		type: 'options',
+		default: 0,
+		options: [
+			{ name: 'All', value: 0 },
+			{ name: 'Phone Device', value: 1 },
+			{ name: 'Room Device', value: 3 },
+		],
+		description: 'Filter by device type. Also limits the Model dropdown below.',
+		displayOptions: {
+			show: {
+				resource: ['firmware'],
+				operation: ['getAllCustom'],
+			},
+		},
+	},
+	{
 		displayName: 'Model',
 		name: 'modelId',
 		type: 'resourceLocator',
 		default: { mode: 'list', value: '' },
-		description: 'Filter by device model',
+		description: 'Filter by device model. The list shown depends on the selected Device Type.',
 		displayOptions: {
 			show: {
 				resource: ['firmware'],
@@ -121,23 +139,6 @@ export const firmwareFields: INodeProperties[] = [
 			},
 		},
 		options: [
-			{
-				displayName: 'Device Type',
-				name: 'deviceType',
-				type: 'options',
-				default: 1,
-				options: [
-					{
-						name: 'Phone Device',
-						value: 1,
-					},
-					{
-						name: 'Room Device',
-						value: 3,
-					},
-				],
-				description: 'Filter by device type',
-			},
 			{
 				displayName: 'Firmware Type',
 				name: 'firmwareType',

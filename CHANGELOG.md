@@ -17,7 +17,8 @@
 
 - Device → Get Many: Device Type, Site, and Model promoted to top-level searchable dropdowns (resource locators). Site dropdown renamed to "Site Including Child(ren)" with clarifying description.
 - Firmware → Get Many Official: Model ID is now a searchable resource locator dropdown.
-- Firmware → Get Many Custom: Model ID promoted to top-level resource locator (removed from Filters).
+- Firmware → Get Many Custom: Model ID and Device Type promoted to top-level fields (removed from Filters). Device Type selection limits the Model dropdown to matching models.
+- Device → Update: Site ID promoted to top-level searchable resource locator dropdown (removed from Update Fields).
 - SIP Account → Create: Display Name, Label, and Site promoted to top-level visible fields with Site as a searchable resource locator.
 - Site → Get, Delete, Update: Site ID fields are now searchable resource locator dropdowns showing the site hierarchy.
 - Site → Update: Parent Site promoted to top-level resource locator dropdown (removed from Update Fields).

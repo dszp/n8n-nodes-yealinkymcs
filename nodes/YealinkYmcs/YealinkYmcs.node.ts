@@ -568,7 +568,9 @@ async function handleDeviceOperation(
 
 	if (operation === 'update') {
 		const deviceId = this.getNodeParameter('deviceId', i) as string;
+		const siteId = this.getNodeParameter('siteId', i, '', { extractValue: true }) as string;
 		const updateFields = this.getNodeParameter('updateFields', i, {}) as IDataObject;
+		if (siteId) updateFields.siteId = siteId;
 		return await ymcsApiRequest.call(
 			this,
 			'PATCH',
@@ -917,9 +919,11 @@ async function handleFirmwareOperation(
 
 	if (operation === 'getAllCustom') {
 		const returnAll = this.getNodeParameter('returnAll', i) as boolean;
+		const deviceType = this.getNodeParameter('deviceType', i, 0) as number;
 		const modelId = this.getNodeParameter('modelId', i, '', { extractValue: true }) as string;
 		const filters = this.getNodeParameter('filters', i, {}) as IDataObject;
 		const filterBody: IDataObject = { ...filters };
+		if (deviceType) filterBody.deviceType = deviceType;
 		if (modelId) filterBody.modelId = modelId;
 		const body: IDataObject = { filter: filterBody };
 		if (returnAll) {
