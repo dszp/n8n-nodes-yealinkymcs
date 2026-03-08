@@ -979,13 +979,15 @@ async function handleRpsOperation(
 
 	if (operation === 'update') {
 		const rpsDeviceId = this.getNodeParameter('rpsDeviceId', i) as string;
+		const serverId = this.getNodeParameter('serverId', i, '', { extractValue: true }) as string;
+		const authName = this.getNodeParameter('authName', i, '') as string;
+		const password = this.getNodeParameter('password', i, '') as string;
 		const updateFields = this.getNodeParameter('updateFields', i, {}) as IDataObject;
-		return await ymcsApiRequest.call(
-			this,
-			'PATCH',
-			`/v2/rps/devices/${rpsDeviceId}`,
-			updateFields,
-		);
+		const body: IDataObject = { ...updateFields };
+		if (serverId) body.serverId = serverId;
+		if (authName) body.authName = authName;
+		if (password) body.password = password;
+		return await ymcsApiRequest.call(this, 'PATCH', `/v2/rps/devices/${rpsDeviceId}`, body);
 	}
 
 	if (operation === 'getServers') {
@@ -1005,12 +1007,15 @@ async function handleRpsOperation(
 	}
 
 	if (operation === 'createServer') {
-		const serverUrl = this.getNodeParameter('serverUrl', i) as string;
+		const serverName = this.getNodeParameter('serverName', i) as string;
+		const url = this.getNodeParameter('url', i) as string;
+		const authName = this.getNodeParameter('authName', i, '') as string;
+		const password = this.getNodeParameter('password', i, '') as string;
 		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
-		return await ymcsApiRequest.call(this, 'POST', '/v2/rps/servers', {
-			serverUrl,
-			...additionalFields,
-		});
+		const body: IDataObject = { serverName, url };
+		if (authName) body.authName = authName;
+		if (password) body.password = password;
+		return await ymcsApiRequest.call(this, 'POST', '/v2/rps/servers', { ...body, ...additionalFields });
 	}
 
 	if (operation === 'deleteServer') {
