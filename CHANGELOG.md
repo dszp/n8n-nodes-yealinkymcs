@@ -1,5 +1,40 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Fix Firmware → Get Many Official returning 400 error: handler now wraps `modelId` in required `filter` object.
+- Fix RPS → Update Server not reading server ID from resource locator (added `extractValue`).
+- Fix Site → Get, Delete, Update not reading site ID from resource locator (added `extractValue`).
+- Fix Site → Update sending empty body to API: now validates at least one field is provided.
+- Fix Site → Update returning empty string as `[""]`: now returns `{ updated: true }` on success.
+- Fix Site → Create handler still reading removed `additionalFields`; now reads `description` directly.
+- Fix Device Identification → Get ID sending user-provided `deviceIdType` which API rejects: hardcoded to `'mac'`.
+- Fix RPS server dropdown showing blank entries: map `serverName` field (not `name`) and include URL.
+
+### Added
+
+- Device → Get Many: Device Type, Site, and Model promoted to top-level searchable dropdowns (resource locators). Site dropdown renamed to "Site Including Child(ren)" with clarifying description.
+- Firmware → Get Many Official: Model ID is now a searchable resource locator dropdown.
+- Firmware → Get Many Custom: Model ID and Device Type promoted to top-level fields (removed from Filters). Device Type selection limits the Model dropdown to matching models.
+- Device → Update: Site ID promoted to top-level searchable resource locator dropdown (removed from Update Fields).
+- SIP Account → Create: Display Name, Label, and Site promoted to top-level visible fields with Site as a searchable resource locator.
+- Site → Get, Delete, Update: Site ID fields are now searchable resource locator dropdowns showing the site hierarchy.
+- Site → Update: Parent Site promoted to top-level resource locator dropdown (removed from Update Fields).
+- Site → Create: Description promoted to top-level visible field; removed empty Additional Fields section.
+- RPS → Update Server: Server ID is now a searchable resource locator dropdown.
+- Model list cache and `getModelList` listSearch method for device model dropdowns.
+
+### Changed
+
+- RPS operation names clarified: Create → Create Device, Create Many → Create Many Devices, Delete → Delete Devices, Update → Update Device. Get Many description updated to note "(not servers)".
+- RPS → Delete Devices: renamed "Device ID Type" to "Use MAC Address or Device ID Type".
+- RPS → Delete Devices: renamed "Device IDs" to "Identifiers of Selected Type".
+- Device → Delete Many: renamed and reordered fields to match RPS Delete style — "Use MAC Address or Device ID Type" selector (defaulting to MAC) now appears before "Identifiers of Selected Type".
+- Device Identification → Get ID: removed unnecessary Additional Fields section (deviceIdType hardcoded to 'mac').
+- Diagnosis → Start Packet Capture: description now notes to retain the Diagnosis ID for stop/lookup.
+
 ## [0.1.3] - 2026-03-07
 
 ### Fixed

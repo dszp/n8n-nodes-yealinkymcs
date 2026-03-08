@@ -77,6 +77,56 @@ export const firmwareFields: INodeProperties[] = [
 		},
 	},
 	{
+		displayName: 'Device Type',
+		name: 'deviceType',
+		type: 'options',
+		default: 0,
+		options: [
+			{ name: 'All', value: 0 },
+			{ name: 'Phone Device', value: 1 },
+			{ name: 'Room Device', value: 3 },
+		],
+		description: 'Filter by device type. Also limits the Model dropdown below.',
+		displayOptions: {
+			show: {
+				resource: ['firmware'],
+				operation: ['getAllCustom'],
+			},
+		},
+	},
+	{
+		displayName: 'Model',
+		name: 'modelId',
+		type: 'resourceLocator',
+		default: { mode: 'list', value: '' },
+		description: 'Filter by device model. The list shown depends on the selected Device Type.',
+		displayOptions: {
+			show: {
+				resource: ['firmware'],
+				operation: ['getAllCustom'],
+			},
+		},
+		modes: [
+			{
+				displayName: 'From List',
+				name: 'list',
+				type: 'list',
+				placeholder: 'Select a model...',
+				typeOptions: {
+					searchListMethod: 'getModelList',
+					searchable: true,
+				},
+			},
+			{
+				displayName: 'By ID',
+				name: 'id',
+				type: 'string',
+				placeholder: 'e.g. model-id-here',
+				hint: 'Enter the model ID directly, or drag a field from a previous node',
+			},
+		],
+	},
+	{
 		displayName: 'Filters',
 		name: 'filters',
 		type: 'collection',
@@ -89,23 +139,6 @@ export const firmwareFields: INodeProperties[] = [
 			},
 		},
 		options: [
-			{
-				displayName: 'Device Type',
-				name: 'deviceType',
-				type: 'options',
-				default: 1,
-				options: [
-					{
-						name: 'Phone Device',
-						value: 1,
-					},
-					{
-						name: 'Room Device',
-						value: 3,
-					},
-				],
-				description: 'Filter by device type',
-			},
 			{
 				displayName: 'Firmware Type',
 				name: 'firmwareType',
@@ -123,13 +156,6 @@ export const firmwareFields: INodeProperties[] = [
 				],
 				description: 'Filter by firmware type',
 			},
-			{
-				displayName: 'Model ID',
-				name: 'modelId',
-				type: 'string',
-				default: '',
-				description: 'Filter by firmware model ID',
-			},
 		],
 	},
 
@@ -137,18 +163,37 @@ export const firmwareFields: INodeProperties[] = [
 	//         firmware: getAllOfficial
 	// ----------------------------------
 	{
-		displayName: 'Model ID',
+		displayName: 'Model',
 		name: 'modelId',
-		type: 'string',
+		type: 'resourceLocator',
+		default: { mode: 'list', value: '' },
 		required: true,
-		default: '',
-		description: 'The firmware model ID to list official firmware versions for',
+		description: 'The model to list official firmware versions for',
 		displayOptions: {
 			show: {
 				resource: ['firmware'],
 				operation: ['getAllOfficial'],
 			},
 		},
+		modes: [
+			{
+				displayName: 'From List',
+				name: 'list',
+				type: 'list',
+				placeholder: 'Select a model...',
+				typeOptions: {
+					searchListMethod: 'getModelList',
+					searchable: true,
+				},
+			},
+			{
+				displayName: 'By ID',
+				name: 'id',
+				type: 'string',
+				placeholder: 'e.g. model-id-here',
+				hint: 'Enter the model ID directly, or drag a field from a previous node',
+			},
+		],
 	},
 	{
 		displayName: 'Return All',

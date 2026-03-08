@@ -13,13 +13,13 @@ export const rpsOperations: INodeProperties[] = [
 		},
 		options: [
 			{
-				name: 'Create',
+				name: 'Create Device',
 				value: 'create',
 				description: 'Add a single RPS device',
 				action: 'Create an RPS device',
 			},
 			{
-				name: 'Create Many',
+				name: 'Create Many Devices',
 				value: 'createMany',
 				description: 'Add multiple RPS devices in a batch',
 				action: 'Create many RPS devices',
@@ -31,7 +31,7 @@ export const rpsOperations: INodeProperties[] = [
 				action: 'Create an RPS server',
 			},
 			{
-				name: 'Delete',
+				name: 'Delete Devices',
 				value: 'delete',
 				description: 'Delete RPS devices',
 				action: 'Delete RPS devices',
@@ -45,7 +45,7 @@ export const rpsOperations: INodeProperties[] = [
 			{
 				name: 'Get Many',
 				value: 'getAll',
-				description: 'Retrieve a list of RPS devices',
+				description: 'Retrieve a list of RPS devices (not servers)',
 				action: 'Get many RPS devices',
 			},
 			{
@@ -55,7 +55,7 @@ export const rpsOperations: INodeProperties[] = [
 				action: 'Get many RPS servers',
 			},
 			{
-				name: 'Update',
+				name: 'Update Device',
 				value: 'update',
 				description: 'Update an RPS device',
 				action: 'Update an RPS device',
@@ -220,7 +220,7 @@ export const rpsFields: INodeProperties[] = [
 	//         rps: delete
 	// ----------------------------------
 	{
-		displayName: 'Device ID Type',
+		displayName: 'Use MAC Address or Device ID Type',
 		name: 'deviceIdType',
 		type: 'options',
 		required: true,
@@ -244,7 +244,7 @@ export const rpsFields: INodeProperties[] = [
 		},
 	},
 	{
-		displayName: 'Device IDs',
+		displayName: 'Identifiers of Selected Type',
 		name: 'deviceIds',
 		type: 'string',
 		required: true,
@@ -615,18 +615,37 @@ export const rpsFields: INodeProperties[] = [
 	//         rps: updateServer
 	// ----------------------------------
 	{
-		displayName: 'RPS Server ID',
+		displayName: 'Server',
 		name: 'rpsServerId',
-		type: 'string',
+		type: 'resourceLocator',
+		default: { mode: 'list', value: '' },
 		required: true,
-		default: '',
-		description: 'The ID of the RPS server to update',
+		description: 'The RPS server to update',
 		displayOptions: {
 			show: {
 				resource: ['rps'],
 				operation: ['updateServer'],
 			},
 		},
+		modes: [
+			{
+				displayName: 'From List',
+				name: 'list',
+				type: 'list',
+				placeholder: 'Select a server...',
+				typeOptions: {
+					searchListMethod: 'getRpsServerList',
+					searchable: true,
+				},
+			},
+			{
+				displayName: 'By ID',
+				name: 'id',
+				type: 'string',
+				placeholder: 'e.g. b38dea23a4e6458188799833b72d950f',
+				hint: 'Enter the server ID directly, or drag a field from a previous node',
+			},
+		],
 	},
 	{
 		displayName: 'Update Fields',

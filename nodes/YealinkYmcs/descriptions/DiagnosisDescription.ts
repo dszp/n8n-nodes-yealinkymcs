@@ -51,7 +51,7 @@ export const diagnosisOperations: INodeProperties[] = [
 			{
 				name: 'Start Packet Capture',
 				value: 'startPacketCapture',
-				description: 'Start a packet capture on a device',
+				description: 'Start a packet capture on a device. Retain the provided Diagnosis ID for the Stop Packet Capture command or other lookup.',
 				action: 'Start packet capture on a device',
 			},
 			{
