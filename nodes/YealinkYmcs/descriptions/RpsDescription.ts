@@ -43,9 +43,9 @@ export const rpsOperations: INodeProperties[] = [
 				action: 'Delete RPS servers',
 			},
 			{
-				name: 'Get Many Devices',
+				name: 'Get Many',
 				value: 'getAll',
-				description: 'Retrieve a list of RPS devices',
+				description: 'Retrieve a list of RPS devices (not servers)',
 				action: 'Get many RPS devices',
 			},
 			{

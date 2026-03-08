@@ -28,7 +28,7 @@
 
 ### Changed
 
-- RPS operation names clarified: Create → Create Device, Create Many → Create Many Devices, Delete → Delete Devices, Get Many → Get Many Devices, Update → Update Device.
+- RPS operation names clarified: Create → Create Device, Create Many → Create Many Devices, Delete → Delete Devices, Update → Update Device. Get Many description updated to note "(not servers)".
 - RPS → Delete Devices: renamed "Device ID Type" to "Use MAC Address or Device ID Type".
 - RPS → Delete Devices: renamed "Device IDs" to "Identifiers of Selected Type".
 - Device → Delete Many: renamed and reordered fields to match RPS Delete style — "Use MAC Address or Device ID Type" selector (defaulting to MAC) now appears before "Identifiers of Selected Type".
