@@ -7,10 +7,16 @@
 - Fix Site → Create sending wrong API body field: `siteName` key renamed to `name` to match Yealink API.
 - Fix Site → Create never reading or sending `parentId` to the API despite it being a required field.
 - Fix Site → Create/Update `description` field sent as `Description` (wrong casing) to the API.
+- Fix RPS → Create handler reading non-existent params; `sn` and `serverId` were never sent to the API.
+- Fix RPS → Create Server handler reading non-existent `serverUrl` param; now reads `serverName` and `url` correctly.
+- Fix RPS → Delete handler reading non-existent `rpsDeviceId`; now reads `deviceIdType` + `deviceIds` and POSTs to batch delete endpoint.
 
 ### Added
 
 - Site → Create: Parent Site field is now a searchable resource locator dropdown showing the full site hierarchy, sorted alphabetically at each level. Falls back to direct ID entry. Site list is cached for 15 minutes per credential to avoid repeated API calls.
+- RPS → Create: Serial Number description now notes it is also known as "Machine ID". Added `Allow Blank Serial Number` toggle for accounts configured by Yealink support to not require a serial number. Added searchable Server dropdown (resource locator).
+- RPS → Update: Added searchable Server dropdown (resource locator) and promoted Auth Name and Password to top-level visible fields.
+- RPS → Create Server: Promoted Auth Name and Password to top-level visible fields.
 
 ## [0.1.2] - 2026-03-06
 
