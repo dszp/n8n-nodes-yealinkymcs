@@ -1,17 +1,17 @@
 {
 	"name": "@dszp/n8n-nodes-yealinkymcs",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"description": "n8n community node for the Yealink Management Cloud Service (YMCS) API",
 	"license": "MIT",
 	"homepage": "https://github.com/dszp/n8n-nodes-yealinkymcs",
 	"keywords": [
 		"n8n-community-node-package"
 	],
-    "author": {
-        "name": "David Szpunar",
-        "email": "davidszp@gmail.com",
-        "url": "https://david.szpunar.com"
-    },
+	"author": {
+		"name": "David Szpunar",
+		"email": "davidszp@gmail.com",
+		"url": "https://david.szpunar.com"
+	},
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/dszp/n8n-nodes-yealinkymcs.git"

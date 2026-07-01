@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.1] - 2026-07-01
+
+### Changed
+
+- Refresh dependencies to the latest `@n8n/node-cli` toolchain: `@n8n/node-cli` 0.22.0 → 0.37.2 and `n8n-workflow` 2.11.0 → 2.28.2 (regenerated `package-lock.json`). No change to declared dependency ranges.
+- Upgrade GitHub Actions to v5 for `checkout` and `setup-node`.
+
+### Fixed
+
+- Wrap re-thrown execution errors in `NodeApiError` (from a raw `throw`) to satisfy the new `require-node-api-error` lint rule in `@n8n/eslint-plugin-community-nodes`. Existing `NodeApiError`s pass through unchanged and inner `NodeOperationError` messages are preserved.
+- Correct author email in `package.json` for accurate attribution.
+
+### Added
+
+- Add MIT `LICENSE` file to the repository.
+
 ## [0.2.0] - 2026-03-08
 
 ### Fixed
