@@ -1,13 +1,9 @@
-import * as crypto from 'crypto';
-// eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
-import * as https from 'https';
-// eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
-import * as querystring from 'querystring';
-
 import type {
 	IDataObject,
 	IExecuteFunctions,
 	IHookFunctions,
+	IHttpRequestMethods,
+	IHttpRequestOptions,
 	ILoadOptionsFunctions,
 	IWebhookFunctions,
 	JsonObject,
@@ -120,101 +116,6 @@ export async function getCachedModelList(
 }
 
 // ---------------------------------------------------------------------------
-// Custom HTTPS agent for Yealink YMCS API servers.
-// The Yealink API servers require TLS renegotiation which OpenSSL 3.x
-// disables by default. We use a dedicated agent with SSL_OP_LEGACY_SERVER_CONNECT
-// so only connections through this agent are affected.
-// ---------------------------------------------------------------------------
-
-const ymcsAgent = new https.Agent({
-	secureOptions: crypto.constants.SSL_OP_LEGACY_SERVER_CONNECT,
-	keepAlive: true,
-});
-
-// ---------------------------------------------------------------------------
-// Low-level HTTPS request using the custom agent
-// ---------------------------------------------------------------------------
-
-interface YmcsRequestOptions {
-	method: string;
-	url: string;
-	headers?: Record<string, string>;
-	body?: unknown;
-	qs?: Record<string, string | number | boolean>;
-}
-
-async function ymcsRawRequest(options: YmcsRequestOptions): Promise<unknown> {
-	const parsedUrl = new URL(options.url);
-
-	if (options.qs && Object.keys(options.qs).length) {
-		const qsStr = querystring.stringify(options.qs as Record<string, string>);
-		parsedUrl.search = parsedUrl.search ? `${parsedUrl.search}&${qsStr}` : `?${qsStr}`;
-	}
-
-	const bodyStr =
-		options.body != null
-			? typeof options.body === 'string'
-				? options.body
-				: JSON.stringify(options.body)
-			: undefined;
-
-	return new Promise((resolve, reject) => {
-		const req = https.request(
-			{
-				hostname: parsedUrl.hostname,
-				port: parsedUrl.port || 443,
-				path: parsedUrl.pathname + parsedUrl.search,
-				method: options.method,
-				headers: {
-					...options.headers,
-					...(bodyStr != null ? { 'Content-Length': String(Buffer.byteLength(bodyStr)) } : {}),
-				},
-				agent: ymcsAgent,
-			},
-			(res) => {
-				const chunks: Buffer[] = [];
-				res.on('data', (chunk: Buffer) => chunks.push(chunk));
-				res.on('end', () => {
-					const raw = Buffer.concat(chunks).toString('utf8');
-					const statusCode = res.statusCode ?? 0;
-
-					let parsed: unknown;
-					try {
-						parsed = JSON.parse(raw);
-					} catch {
-						parsed = raw;
-					}
-
-					if (statusCode >= 400) {
-						const err: Record<string, unknown> = {
-							message: `Request failed with status ${statusCode}`,
-							httpCode: statusCode,
-							response: { body: parsed },
-						};
-						reject(err);
-						return;
-					}
-
-					resolve(parsed);
-				});
-			},
-		);
-
-		req.on('error', (err) => {
-			reject({
-				message: err.message,
-				code: (err as NodeJS.ErrnoException).code,
-			});
-		});
-
-		if (bodyStr != null) {
-			req.write(bodyStr);
-		}
-		req.end();
-	});
-}
-
-// ---------------------------------------------------------------------------
 // Region → Base URL mapping
 // ---------------------------------------------------------------------------
 
@@ -242,71 +143,49 @@ export function generateNonce(): string {
 }
 
 // ---------------------------------------------------------------------------
-// Token cache
+// Error extraction
+//
+// Token acquisition, caching and 401 refresh all live in the credential
+// (preAuthentication / authenticate); n8n owns that lifecycle now. What is left
+// here is unwrapping the YMCS error envelope, which n8n nests differently
+// depending on how the failure surfaced.
 // ---------------------------------------------------------------------------
 
-interface CachedToken {
-	token: string;
-	expiresAt: number;
-}
+/** Pull the YMCS error envelope `{ code, requestId, message, details }` out of a thrown error. */
+function extractErrorBody(error: unknown): IDataObject | undefined {
+	const e = error as Record<string, unknown>;
 
-const tokenCache = new Map<string, CachedToken>();
+	const candidates: unknown[] = [
+		(e.response as Record<string, unknown>)?.body,
+		(e.response as Record<string, unknown>)?.data,
+		(e.cause as Record<string, unknown>)?.response &&
+			((e.cause as Record<string, unknown>).response as Record<string, unknown>).body,
+		(e.cause as Record<string, unknown>)?.response &&
+			((e.cause as Record<string, unknown>).response as Record<string, unknown>).data,
+		e.error,
+		e.cause,
+	];
 
-export async function getAccessToken(
-	_context: unknown,
-	credentials: IDataObject,
-): Promise<string> {
-	const clientId = credentials.clientId as string;
-	const clientSecret = credentials.clientSecret as string;
-	const cached = tokenCache.get(clientId);
-
-	// Return cached token if still valid (5-minute safety margin)
-	if (cached && cached.expiresAt > Date.now()) {
-		return cached.token;
+	for (const candidate of candidates) {
+		if (candidate && typeof candidate === 'object' && 'message' in candidate) {
+			return candidate as IDataObject;
+		}
 	}
 
-	const region = credentials.region as string;
-	const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-
-	const response = (await ymcsRawRequest({
-		method: 'POST',
-		url: `${getBaseUrl(region)}/v2/token`,
-		headers: {
-			Authorization: `Basic ${basicAuth}`,
-			'Content-Type': 'application/json',
-			timestamp: String(Date.now()),
-			nonce: generateNonce(),
-		},
-		body: { grant_type: 'client_credentials' },
-	})) as { access_token: string; token_type: string; expires_in: number };
-
-	const token = response.access_token;
-	const expiresIn = response.expires_in ?? 86400;
-	// Cache with 5-minute safety margin
-	const expiresAt = Date.now() + (expiresIn - 300) * 1000;
-
-	tokenCache.set(clientId, { token, expiresAt });
-	return token;
+	return undefined;
 }
 
-/** Clear cached token for a given clientId (used on 401 retry). */
-export function clearTokenCache(clientId: string): void {
-	tokenCache.delete(clientId);
-}
-
-// ---------------------------------------------------------------------------
-// Safe error extraction (errors may contain circular socket/agent refs)
-// ---------------------------------------------------------------------------
-
+/** Flatten an error into a plain object; raw errors can carry circular socket refs. */
 function safeErrorJson(error: unknown): JsonObject {
 	const e = error as Record<string, unknown>;
+	const response = e.response as Record<string, unknown> | undefined;
+
 	return {
 		message: (e.message as string) ?? 'Unknown error',
 		code: (e.code as string) ?? undefined,
-		httpCode: (e.httpCode as number) ?? undefined,
-		response: e.response
-			? { body: (e.response as Record<string, unknown>).body ?? undefined }
-			: undefined,
+		// n8n rethrows the raw AxiosError, which carries the status on response.status.
+		httpCode: ((e.httpCode ?? e.statusCode ?? response?.status) as number) ?? undefined,
+		response: { body: extractErrorBody(error) },
 	} as unknown as JsonObject;
 }
 
@@ -314,64 +193,61 @@ function safeErrorJson(error: unknown): JsonObject {
 // Authenticated API request
 // ---------------------------------------------------------------------------
 
+/**
+ * `body` is optional on purpose: omitting it and passing `{}` mean different things.
+ * YMCS answers a bodyless POST with 412 (code 900444), but accepts `{}` and applies
+ * its own defaults — so an explicit empty object must be sent as-is.
+ */
 export async function ymcsApiRequest(
 	this: IExecuteFunctions | ILoadOptionsFunctions | IHookFunctions | IWebhookFunctions,
-	method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+	method: IHttpRequestMethods,
 	endpoint: string,
-	body: IDataObject = {},
+	body?: IDataObject,
 	qs: IDataObject = {},
 ): Promise<IDataObject> {
 	const credentials = await this.getCredentials('yealinkYmcsApi');
 	const baseUrl = getBaseUrl(credentials.region as string);
 
-	const token = await getAccessToken(this, credentials);
-
-	const requestOptions: YmcsRequestOptions = {
+	const requestOptions: IHttpRequestOptions = {
 		method,
 		url: `${baseUrl}${endpoint}`,
 		headers: {
-			Authorization: `Bearer ${token}`,
 			'Content-Type': 'application/json',
-			timestamp: String(Date.now()),
-			nonce: generateNonce(),
 		},
-		qs: Object.keys(qs).length ? (qs as Record<string, string>) : undefined,
+		json: true,
 	};
 
-	if (method !== 'GET' && method !== 'DELETE' && Object.keys(body).length) {
-		requestOptions.body = body;
+	if (Object.keys(qs).length) {
+		requestOptions.qs = qs;
+	}
+
+	if (method !== 'GET' && method !== 'DELETE' && body !== undefined) {
+		// n8n's HTTP layer silently drops an empty object body, so the request would go
+		// out with no body at all and YMCS answers 412 (code 900444). Sending the
+		// already-serialized form puts `{}` on the wire; non-empty bodies are unaffected.
+		requestOptions.body = Object.keys(body).length === 0 ? '{}' : body;
 	}
 
 	try {
-		return (await ymcsRawRequest(requestOptions)) as IDataObject;
-	} catch (error) {
-		// On 401, clear token cache and retry once
-		const statusCode = (error as { httpCode?: number }).httpCode;
-		if (statusCode === 401) {
-			clearTokenCache(credentials.clientId as string);
-			const newToken = await getAccessToken(this, credentials);
-			requestOptions.headers = {
-				...requestOptions.headers,
-				Authorization: `Bearer ${newToken}`,
-				timestamp: String(Date.now()),
-				nonce: generateNonce(),
-			};
-			try {
-				return (await ymcsRawRequest(requestOptions)) as IDataObject;
-			} catch (retryError) {
-				throw new NodeApiError(this.getNode(), safeErrorJson(retryError), {
-					message: 'Authentication failed after token refresh',
-				});
-			}
+		const response = await this.helpers.httpRequestWithAuthentication.call(
+			this,
+			'yealinkYmcsApi',
+			requestOptions,
+		);
+
+		// Updates and deletes answer 204 with no body; normalize so callers never
+		// see an empty string where they expect an object.
+		if (response === undefined || response === null || response === '') {
+			return {};
 		}
 
-		// Parse YMCS error format: { code, requestId, message, details }
-		const errorBody = (error as { response?: { body?: IDataObject } }).response?.body;
+		return response as IDataObject;
+	} catch (error) {
+		// YMCS error format: { code, requestId, message, details: [{ field, message }] }
+		const errorBody = extractErrorBody(error);
 		if (errorBody) {
 			const details = errorBody.details as Array<{ field: string; message: string }> | undefined;
-			const detailText = details
-				?.map((d) => `${d.field}: ${d.message}`)
-				.join('; ');
+			const detailText = details?.map((d) => `${d.field}: ${d.message}`).join('; ');
 			throw new NodeApiError(this.getNode(), safeErrorJson(error), {
 				message: (errorBody.message as string) || 'YMCS API request failed',
 				description: detailText || `Error code: ${errorBody.code as string}`,

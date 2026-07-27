@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.3.0] - 2026-07-27
+
+### Changed
+
+- **Removed the legacy TLS renegotiation workaround.** The node no longer uses a custom `https.Agent` with `SSL_OP_LEGACY_SERVER_CONNECT` and raw `https.request`; all traffic now goes through n8n's own HTTP stack (`httpRequestWithAuthentication`). The workaround existed because OpenSSL 3.x refuses unsafe renegotiation, but all three regional hosts (`us-`, `eu-`, `au-api.ymcs.yealink.com`) now negotiate TLS 1.3, which removes renegotiation from the protocol entirely. Benefits: n8n's proxy, timeout and credential-redaction handling now apply. Risk: an environment that forces the connection below TLS 1.3 (for example a TLS-intercepting proxy) no longer has an escape hatch.
+- **Authentication moved into the credential.** Token acquisition, caching and 401 refresh are now handled by `preAuthentication` + `authenticate` on `YealinkYmcsApi` instead of a module-level token cache in the node. Auth is defined in exactly one place and behaves identically whether the call comes from this node or an HTTP Request node.
+- Credentials are now auto-validated. The "credentials cannot be auto-validated" notice is gone, and the node-side `testedBy` credential test is replaced by a declarative `test` request.
+
+### Added
+
+- **Credential is now usable from the HTTP Request node.** `YealinkYmcsApi` declares an `authenticate` block, so it appears under Authentication → Predefined Credential Type → "Yealink YMCS API". Any YMCS endpoint can be called from a plain HTTP Request node with the Bearer token, `timestamp` and `nonce` headers applied automatically.
+- **New Custom API Call resource.** Call any YMCS endpoint with your own method, path, query parameters and JSON body, using the node's existing authentication. Options include `Paginate All Pages`, which walks a POST list endpoint with the standard skip/limit/autoCount pattern, plus `Response Data Key` and `Max Page Size`.
+- The Region dropdown now shows the API host for each region (for example "US - us-api.ymcs.yealink.com"), so the base URL is visible when writing it out by hand in an HTTP Request node.
+- Credentials are now auto-validated on save. The test performs a real authenticated call, so a green result proves token acquisition and header signing, not just that the fields are filled in.
+
+### Fixed
+
+- Device → Update returning an empty item on success. The endpoint answers 204 with no body, which the node emitted as `""` — indistinguishable from a failed update. It now returns `{ updated: true }`. Same fix applied to SIP Account → Update, RPS → Update Device, RPS → Update Server, Device Group → Update, and all three Configuration updates; Site → Update already had it in 0.2.0.
+- Device → Create Many silently dropping serial numbers. The Add Method dropdown emits `withSn`, but the handler compared against `macAndSn`, so the "With MAC and Serial Number" branch was unreachable and every batch posted to `/v2/dm/addDevicesByMac`.
+- Device Group → Create sending the group name as `groupName`; the API body field is `name`, so creation failed. Same fix for Device Group → Update, which also now sends the `deviceType` the API requires.
+- Device → Update, SIP Account → Update, RPS → Update Device and RPS → Update Server sending a bodyless PATCH when no fields were set. They now raise "No fields provided to update", matching Site → Update.
+
+### Changed (UI)
+
+- Device → Update: the Site field is relabeled "Move to Site" with a description clarifying that leaving it empty keeps the device in its current site. Previously it read as a scope selector, since that is what the identically-labeled field does on Device → Get Many. The internal field name is unchanged, so existing workflows keep their value.
+- Device Group → Update: Device Type promoted from Additional Fields to a required top-level field, because the API rejects updates without it.
+
 ## [0.2.1] - 2026-07-01
 
 ### Changed

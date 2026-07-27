@@ -1,10 +1,8 @@
 import type {
-	ICredentialTestFunctions,
-	ICredentialsDecrypted,
 	IDataObject,
 	IExecuteFunctions,
+	IHttpRequestMethods,
 	ILoadOptionsFunctions,
-	INodeCredentialTestResult,
 	INodeExecutionData,
 	INodeListSearchResult,
 	INodeType,
@@ -14,7 +12,6 @@ import type {
 import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 import {
-	getAccessToken,
 	getCachedModelList,
 	getCachedRpsServerList,
 	getCachedSiteList,
@@ -27,6 +24,10 @@ import {
 	configurationOperations,
 	configurationFields,
 } from './descriptions/ConfigurationDescription';
+import {
+	customApiCallOperations,
+	customApiCallFields,
+} from './descriptions/CustomApiCallDescription';
 import { deviceOperations, deviceFields } from './descriptions/DeviceDescription';
 import {
 	deviceAccessoryOperations,
@@ -78,7 +79,6 @@ export class YealinkYmcs implements INodeType {
 			{
 				name: 'yealinkYmcsApi',
 				required: true,
-				testedBy: 'yealinkYmcsApiTest',
 			},
 		],
 		properties: [
@@ -90,6 +90,7 @@ export class YealinkYmcs implements INodeType {
 				options: [
 					{ name: 'Alarm', value: 'alarm' },
 					{ name: 'Configuration', value: 'configuration' },
+					{ name: 'Custom API Call', value: 'customApiCall' },
 					{ name: 'Device', value: 'device' },
 					{ name: 'Device Accessory', value: 'deviceAccessory' },
 					{ name: 'Device Account', value: 'deviceAccount' },
@@ -112,6 +113,8 @@ export class YealinkYmcs implements INodeType {
 			...alarmFields,
 			...configurationOperations,
 			...configurationFields,
+			...customApiCallOperations,
+			...customApiCallFields,
 			...deviceOperations,
 			...deviceFields,
 			...deviceAccessoryOperations,
@@ -142,26 +145,6 @@ export class YealinkYmcs implements INodeType {
 	};
 
 	methods = {
-		credentialTest: {
-			async yealinkYmcsApiTest(
-				this: ICredentialTestFunctions,
-				credential: ICredentialsDecrypted,
-			): Promise<INodeCredentialTestResult> {
-				const credentials = credential.data as IDataObject;
-				try {
-					await getAccessToken(this, credentials);
-					return {
-						status: 'OK',
-						message: 'Connection successful',
-					};
-				} catch (error) {
-					return {
-						status: 'Error',
-						message: `Connection failed: ${(error as Error).message}`,
-					};
-				}
-			},
-		},
 		listSearch: {
 			async getRpsServerList(
 				this: ILoadOptionsFunctions,
@@ -305,6 +288,13 @@ export class YealinkYmcs implements INodeType {
 				// ---------------------------------------------------------------
 				else if (resource === 'configuration') {
 					responseData = await handleConfigurationOperation.call(this, operation, i);
+				}
+
+				// ---------------------------------------------------------------
+				// CUSTOM API CALL
+				// ---------------------------------------------------------------
+				else if (resource === 'customApiCall') {
+					responseData = await handleCustomApiCallOperation.call(this, operation, i);
 				}
 
 				// ---------------------------------------------------------------
@@ -489,6 +479,105 @@ export class YealinkYmcs implements INodeType {
 // Resource handler helpers
 // ==========================================================================
 
+/**
+ * YMCS answers every update with 204 and no body. Returning that verbatim emits an
+ * empty item, which reads as "nothing happened" even though the change was applied.
+ */
+function updateResult(response: IDataObject): IDataObject {
+	return response && Object.keys(response).length > 0 ? response : { updated: true };
+}
+
+async function handleCustomApiCallOperation(
+	this: IExecuteFunctions,
+	operation: string,
+	i: number,
+): Promise<IDataObject | IDataObject[]> {
+	if (operation !== 'makeRequest') {
+		throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`, {
+			itemIndex: i,
+		});
+	}
+
+	const method = this.getNodeParameter('customMethod', i) as IHttpRequestMethods;
+	const rawEndpoint = (this.getNodeParameter('customEndpoint', i) as string).trim();
+	const queryParameters = this.getNodeParameter('customQuery', i, {}) as {
+		parameters?: Array<{ name: string; value: string }>;
+	};
+	const options = this.getNodeParameter('customOptions', i, {}) as IDataObject;
+
+	if (!rawEndpoint) {
+		throw new NodeOperationError(this.getNode(), "The 'Endpoint' parameter is empty", {
+			itemIndex: i,
+			description: "Set a path to call, for example '/v2/dm/listDevices'.",
+		});
+	}
+
+	const endpoint = rawEndpoint.startsWith('/') ? rawEndpoint : `/${rawEndpoint}`;
+
+	const qs: IDataObject = {};
+	for (const entry of queryParameters.parameters ?? []) {
+		if (entry.name) qs[entry.name] = entry.value;
+	}
+
+	// undefined for GET/DELETE (no body at all); `{}` is a valid body that YMCS accepts
+	// and must be sent verbatim — a bodyless POST comes back 412.
+	let body: IDataObject | undefined;
+	if (method !== 'GET' && method !== 'DELETE') {
+		body = {};
+		const rawBody = this.getNodeParameter('customBody', i, '{}');
+		if (typeof rawBody === 'string') {
+			const trimmed = rawBody.trim();
+			if (trimmed) {
+				try {
+					body = JSON.parse(trimmed) as IDataObject;
+				} catch (error) {
+					throw new NodeOperationError(
+						this.getNode(),
+						`The 'Body' parameter is not valid JSON [item ${i}]`,
+						{
+							itemIndex: i,
+							description: (error as Error).message,
+						},
+					);
+				}
+			}
+		} else if (rawBody && typeof rawBody === 'object') {
+			body = rawBody as IDataObject;
+		}
+	}
+
+	if (options.paginate === true) {
+		if (method !== 'POST') {
+			throw new NodeOperationError(
+				this.getNode(),
+				"'Paginate All Pages' only works with POST requests",
+				{
+					itemIndex: i,
+					description:
+						"Every YMCS list endpoint is POST-based. Set 'Method' to POST, or turn off 'Paginate All Pages'.",
+				},
+			);
+		}
+
+		// skip/limit/autoCount are supplied by the paginator; drop any the user set.
+		const filterBody: IDataObject = { ...body };
+		delete filterBody.skip;
+		delete filterBody.limit;
+		delete filterBody.autoCount;
+
+		return await ymcsApiRequestAllItems.call(
+			this,
+			endpoint,
+			filterBody,
+			(options.dataKey as string) || 'data',
+			undefined,
+			(options.maxPageSize as number) || 500,
+		);
+	}
+
+	return await ymcsApiRequest.call(this, method, endpoint, body, qs);
+}
+
 async function handleDeviceOperation(
 	this: IExecuteFunctions,
 	operation: string,
@@ -508,8 +597,7 @@ async function handleDeviceOperation(
 		const addMethod = this.getNodeParameter('addMethod', i) as string;
 		const devicesJson = this.getNodeParameter('devicesJson', i) as string;
 		const devices = JSON.parse(devicesJson);
-		const endpoint =
-			addMethod === 'macAndSn' ? '/v2/dm/addDevices' : '/v2/dm/addDevicesByMac';
+		const endpoint = addMethod === 'withSn' ? '/v2/dm/addDevices' : '/v2/dm/addDevicesByMac';
 		return await ymcsApiRequest.call(this, 'POST', endpoint, { devices });
 	}
 
@@ -571,13 +659,22 @@ async function handleDeviceOperation(
 		const deviceId = this.getNodeParameter('deviceId', i) as string;
 		const siteId = this.getNodeParameter('siteId', i, '', { extractValue: true }) as string;
 		const updateFields = this.getNodeParameter('updateFields', i, {}) as IDataObject;
-		if (siteId) updateFields.siteId = siteId;
-		return await ymcsApiRequest.call(
+		const body: IDataObject = { ...updateFields };
+		if (siteId) body.siteId = siteId;
+		if (Object.keys(body).length === 0) {
+			throw new NodeOperationError(this.getNode(), 'No fields provided to update', {
+				itemIndex: i,
+				description:
+					"Set 'Move to Site' or add at least one field to 'Update Fields' (Device Name).",
+			});
+		}
+		const response = await ymcsApiRequest.call(
 			this,
 			'PATCH',
 			`/v2/dm/devices/${deviceId}`,
-			updateFields,
+			body,
 		);
+		return updateResult(response);
 	}
 
 	throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`, {
@@ -594,8 +691,9 @@ async function handleDeviceGroupOperation(
 		const groupName = this.getNodeParameter('groupName', i) as string;
 		const deviceType = this.getNodeParameter('deviceType', i) as number;
 		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
+		// The API body field is `name`, not `groupName`.
 		return await ymcsApiRequest.call(this, 'POST', '/v2/dm/deviceGroups', {
-			groupName,
+			name: groupName,
 			deviceType,
 			...additionalFields,
 		});
@@ -627,13 +725,16 @@ async function handleDeviceGroupOperation(
 	if (operation === 'update') {
 		const deviceGroupId = this.getNodeParameter('deviceGroupId', i) as string;
 		const groupName = this.getNodeParameter('groupName', i) as string;
+		const deviceType = this.getNodeParameter('deviceType', i) as number;
 		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
-		return await ymcsApiRequest.call(
+		// The API body field is `name`, not `groupName`, and `deviceType` is required.
+		const response = await ymcsApiRequest.call(
 			this,
 			'PATCH',
 			`/v2/dm/deviceGroups/${deviceGroupId}`,
-			{ groupName, ...additionalFields },
+			{ name: groupName, deviceType, ...additionalFields },
 		);
+		return updateResult(response);
 	}
 
 	if (operation === 'addDevices') {
@@ -1041,7 +1142,20 @@ async function handleRpsOperation(
 		if (serverId) body.serverId = serverId;
 		if (authName) body.authName = authName;
 		if (password) body.password = password;
-		return await ymcsApiRequest.call(this, 'PATCH', `/v2/rps/devices/${rpsDeviceId}`, body);
+		if (Object.keys(body).length === 0) {
+			throw new NodeOperationError(this.getNode(), 'No fields provided to update', {
+				itemIndex: i,
+				description:
+					"Set 'Server', 'Auth Name' or 'Password', or add at least one field to 'Update Fields'.",
+			});
+		}
+		const response = await ymcsApiRequest.call(
+			this,
+			'PATCH',
+			`/v2/rps/devices/${rpsDeviceId}`,
+			body,
+		);
+		return updateResult(response);
 	}
 
 	if (operation === 'getServers') {
@@ -1081,12 +1195,19 @@ async function handleRpsOperation(
 	if (operation === 'updateServer') {
 		const rpsServerId = this.getNodeParameter('rpsServerId', i, '', { extractValue: true }) as string;
 		const updateFields = this.getNodeParameter('updateFields', i, {}) as IDataObject;
-		return await ymcsApiRequest.call(
+		if (Object.keys(updateFields).length === 0) {
+			throw new NodeOperationError(this.getNode(), 'No fields provided to update', {
+				itemIndex: i,
+				description: "Add at least one field to 'Update Fields'.",
+			});
+		}
+		const response = await ymcsApiRequest.call(
 			this,
 			'PATCH',
 			`/v2/rps/servers/${rpsServerId}`,
 			updateFields,
 		);
+		return updateResult(response);
 	}
 
 	throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`, {
@@ -1143,12 +1264,19 @@ async function handleSipAccountOperation(
 	if (operation === 'update') {
 		const accountId = this.getNodeParameter('accountId', i) as string;
 		const updateFields = this.getNodeParameter('updateFields', i, {}) as IDataObject;
-		return await ymcsApiRequest.call(
+		if (Object.keys(updateFields).length === 0) {
+			throw new NodeOperationError(this.getNode(), 'No fields provided to update', {
+				itemIndex: i,
+				description: "Add at least one field to 'Update Fields'.",
+			});
+		}
+		const response = await ymcsApiRequest.call(
 			this,
 			'PATCH',
 			`/v2/dm/sipAccounts/${accountId}`,
 			updateFields,
 		);
+		return updateResult(response);
 	}
 
 	throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`, {
@@ -1210,7 +1338,7 @@ async function handleSiteOperation(
 			});
 		}
 		const response = await ymcsApiRequest.call(this, 'PATCH', `/v2/dm/sites/${siteId}`, updateFields);
-		return response && Object.keys(response).length > 0 ? response : { updated: true };
+		return updateResult(response);
 	}
 
 	throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`, {
@@ -1261,11 +1389,17 @@ async function handleConfigurationOperation(
 		const name = this.getNodeParameter('name', i) as string;
 		const modelId = this.getNodeParameter('modelId', i) as string;
 		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
-		return await ymcsApiRequest.call(this, 'PATCH', `/v2/dm/deviceConfigs/${configId}`, {
-			name,
-			modelId,
-			...additionalFields,
-		});
+		const response = await ymcsApiRequest.call(
+			this,
+			'PATCH',
+			`/v2/dm/deviceConfigs/${configId}`,
+			{
+				name,
+				modelId,
+				...additionalFields,
+			},
+		);
+		return updateResult(response);
 	}
 
 	if (operation === 'deleteDeviceConfigs') {
@@ -1325,12 +1459,13 @@ async function handleConfigurationOperation(
 		const siteId = this.getNodeParameter('siteId', i) as string;
 		const deviceType = this.getNodeParameter('deviceType', i) as number;
 		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
-		return await ymcsApiRequest.call(this, 'PATCH', `/v2/dm/siteConfigs/${configId}`, {
+		const response = await ymcsApiRequest.call(this, 'PATCH', `/v2/dm/siteConfigs/${configId}`, {
 			name,
 			siteId,
 			deviceType,
 			...additionalFields,
 		});
+		return updateResult(response);
 	}
 
 	if (operation === 'deleteSiteConfigs') {
@@ -1390,12 +1525,13 @@ async function handleConfigurationOperation(
 		const deviceGroupId = this.getNodeParameter('deviceGroupId', i) as string;
 		const deviceType = this.getNodeParameter('deviceType', i) as number;
 		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
-		return await ymcsApiRequest.call(this, 'PATCH', `/v2/dm/groupConfigs/${configId}`, {
+		const response = await ymcsApiRequest.call(this, 'PATCH', `/v2/dm/groupConfigs/${configId}`, {
 			name,
 			deviceGroupId,
 			deviceType,
 			...additionalFields,
 		});
+		return updateResult(response);
 	}
 
 	if (operation === 'deleteGroupConfigs') {

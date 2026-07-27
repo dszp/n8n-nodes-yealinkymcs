@@ -543,11 +543,12 @@ export const deviceFields: INodeProperties[] = [
 		},
 	},
 	{
-		displayName: 'Site',
+		displayName: 'Move to Site',
 		name: 'siteId',
 		type: 'resourceLocator',
 		default: { mode: 'list', value: '' },
-		description: 'Assign the device to a site',
+		description:
+			'Move the device to this site. Leave empty to keep the device in its current site.',
 		displayOptions: {
 			show: {
 				resource: ['device'],
