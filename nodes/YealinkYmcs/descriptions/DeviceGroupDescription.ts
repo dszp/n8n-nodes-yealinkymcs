@@ -252,6 +252,30 @@ export const deviceGroupFields: INodeProperties[] = [
 		},
 	},
 	{
+		displayName: 'Device Type',
+		name: 'deviceType',
+		type: 'options',
+		required: true,
+		default: 1,
+		description: 'The type of devices in this group. The API requires this on every update.',
+		options: [
+			{
+				name: 'Phone Device',
+				value: 1,
+			},
+			{
+				name: 'Room Device',
+				value: 3,
+			},
+		],
+		displayOptions: {
+			show: {
+				resource: ['deviceGroup'],
+				operation: ['update'],
+			},
+		},
+	},
+	{
 		displayName: 'Additional Fields',
 		name: 'additionalFields',
 		type: 'collection',
@@ -270,23 +294,6 @@ export const deviceGroupFields: INodeProperties[] = [
 				type: 'string',
 				default: '',
 				description: 'Group description information (max 256 characters)',
-			},
-			{
-				displayName: 'Device Type',
-				name: 'deviceType',
-				type: 'options',
-				default: 1,
-				description: 'The type of devices in this group',
-				options: [
-					{
-						name: 'Phone Device',
-						value: 1,
-					},
-					{
-						name: 'Room Device',
-						value: 3,
-					},
-				],
 			},
 		],
 	},

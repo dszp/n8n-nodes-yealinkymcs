@@ -29,4 +29,11 @@ Note: The YMCS API also has `/v2/rps/...` endpoints that overlap with some RPS J
 
 ## Current Known Issues
 
-(No current known issues)
+- Device Group → Update requires `deviceType` on every call (API constraint), so the field is a
+  required top-level input even when only the name is changing. If Yealink ever makes it
+  optional, demote it back into Additional Fields.
+
+## Verify After Release
+
+- Confirm the credential appears in the HTTP Request node on a real community-package install
+  (verified in the dev container via `N8N_CUSTOM_EXTENSIONS`, which uses a different loader).
