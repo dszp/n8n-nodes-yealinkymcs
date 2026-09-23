@@ -152,6 +152,7 @@ Detailed n8n development standards are in `.claude/rules/` (auto-loaded when edi
 
 - **CI** (`.github/workflows/ci.yml`): Runs lint + build on PRs and pushes to main (Node 24)
 - **No automated tests** — testing is manual via `npm run dev` against Yealink YMCS instances
+- **Release** (`.github/workflows/release-publish.yml`): a published GitHub Release publishes to npm via OIDC trusted publishing with provenance. **Every npm version has a matching tag and GitHub Release** — including hand-published ones; after any release, compare `gh release list` with the package's npm versions. The workflow skips a version npm already has, so a backfilled Release on a current commit is a no-op. A backfill whose tag predates that guard (added after 0.4.0) runs the old workflow: `gh workflow disable release-publish.yml`, create the Release, wait ~30 s, re-enable, then delete any run for that tag. `v0.1.0` was backfilled this way on 2026-09-23 (tag on `3967526`, npm's recorded `gitHead`).
 
 ## Key Documentation Links
 
