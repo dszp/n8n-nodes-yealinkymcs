@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.4.0] - 2026-09-23
 
 Every write operation was checked against the live API on 2026-09-23, working from the parameter
 values the UI collects down to the request. Before this, the node's writes had never been run. The
