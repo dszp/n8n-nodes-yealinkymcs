@@ -48,7 +48,7 @@ This node supports 16 resources covering the full YMCS API:
 | Resource | Operations |
 |----------|-----------|
 | **Alarm** | Get Many |
-| **Configuration** | Create, Delete, Get, Get Many, Push, Update (for Device, Site, and Group configs) |
+| **Configuration** | Create, Delete, Get, Get Many, Push (Device, Site and Group configs); Update (Site and Group configs only: a device config cannot be updated, so delete it and create it again) |
 | **Custom API Call** | Make API Request |
 | **Device** | Create, Create Many, Delete, Delete Many, Get, Get Configuration, Get Many, Update |
 | **Device Accessory** | Get, Get Many, Restart, Factory Reset |
