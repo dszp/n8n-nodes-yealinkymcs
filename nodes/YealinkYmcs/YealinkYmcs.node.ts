@@ -598,7 +598,8 @@ async function handleDeviceOperation(
 		const devicesJson = this.getNodeParameter('devicesJson', i) as string;
 		const devices = JSON.parse(devicesJson);
 		const endpoint = addMethod === 'withSn' ? '/v2/dm/addDevices' : '/v2/dm/addDevicesByMac';
-		return await ymcsApiRequest.call(this, 'POST', endpoint, { devices });
+		// YMCS takes a bare JSON array here; `{ devices }` answers 412 as if the body were missing.
+		return await ymcsApiRequest.call(this, 'POST', endpoint, devices);
 	}
 
 	if (operation === 'delete') {
@@ -612,11 +613,12 @@ async function handleDeviceOperation(
 			.split(',')
 			.map((id) => id.trim());
 		const deviceType = this.getNodeParameter('deviceType', i) as number;
-		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
+		// Without deviceIdType YMCS reads every entry as a device ID, so MACs fail as not found.
+		const deviceIdType = this.getNodeParameter('deviceIdType', i, 'id') as string;
 		return await ymcsApiRequest.call(this, 'POST', '/v2/dm/delDevices', {
 			deviceIds,
 			deviceType,
-			...additionalFields,
+			deviceIdType,
 		});
 	}
 
@@ -871,7 +873,8 @@ async function handleDeviceAccountOperation(
 			this,
 			'POST',
 			`/v2/dm/devices/${deviceId}/bindAccounts`,
-			{ accounts },
+			// A bare array, like the bulk adds; `{ accounts }` answers 412.
+			accounts,
 		);
 	}
 
@@ -949,6 +952,7 @@ async function handleDiagnosisOperation(
 			this,
 			'PUT',
 			`/v2/dm/devices/${deviceId}/captureScreen`,
+			{},
 		);
 	}
 
@@ -957,6 +961,7 @@ async function handleDiagnosisOperation(
 			this,
 			'PUT',
 			`/v2/dm/devices/${deviceId}/exportSyslog`,
+			{},
 		);
 	}
 
@@ -965,6 +970,7 @@ async function handleDiagnosisOperation(
 			this,
 			'PUT',
 			`/v2/dm/devices/${deviceId}/exportConfig`,
+			{},
 		);
 	}
 
@@ -1101,18 +1107,20 @@ async function handleRpsOperation(
 	if (operation === 'createMany') {
 		const devicesJson = this.getNodeParameter('devicesJson', i) as string;
 		const devices = JSON.parse(devicesJson);
-		return await ymcsApiRequest.call(this, 'POST', '/v2/rps/addDevices', { devices });
+		// A bare array; `{ devices }` answers 412.
+		return await ymcsApiRequest.call(this, 'POST', '/v2/rps/addDevices', devices);
 	}
 
 	if (operation === 'delete') {
 		const deviceIdType = this.getNodeParameter('deviceIdType', i) as string;
 		const deviceIds = this.getNodeParameter('deviceIds', i) as string;
 		const ids = deviceIds.split(',').map((s: string) => s.trim()).filter(Boolean);
-		await ymcsApiRequest.call(this, 'POST', '/v2/rps/deleteDevices', {
-			ids,
-			idType: deviceIdType,
+		// A bulk call: it answers 200 with per-item failures counted in `failureCount`, so the
+		// response is returned as-is rather than a blanket `{ deleted: true }`.
+		return await ymcsApiRequest.call(this, 'POST', '/v2/rps/delDevices', {
+			deviceIdType,
+			deviceIds: ids,
 		});
-		return { deleted: true };
 	}
 
 	if (operation === 'getAll') {
@@ -1187,25 +1195,25 @@ async function handleRpsOperation(
 	}
 
 	if (operation === 'deleteServer') {
-		const rpsServerId = this.getNodeParameter('rpsServerId', i) as string;
-		await ymcsApiRequest.call(this, 'DELETE', `/v2/rps/servers/${rpsServerId}`);
-		return { deleted: true };
+		const serverIds = (this.getNodeParameter('serverIds', i) as string)
+			.split(',')
+			.map((id) => id.trim())
+			.filter(Boolean);
+		// YMCS has no single-server DELETE (it answers 405); servers are deleted in bulk.
+		return await ymcsApiRequest.call(this, 'POST', '/v2/rps/delServers', { serverIds });
 	}
 
 	if (operation === 'updateServer') {
 		const rpsServerId = this.getNodeParameter('rpsServerId', i, '', { extractValue: true }) as string;
+		const serverName = this.getNodeParameter('serverName', i) as string;
+		const url = this.getNodeParameter('url', i) as string;
 		const updateFields = this.getNodeParameter('updateFields', i, {}) as IDataObject;
-		if (Object.keys(updateFields).length === 0) {
-			throw new NodeOperationError(this.getNode(), 'No fields provided to update', {
-				itemIndex: i,
-				description: "Add at least one field to 'Update Fields'.",
-			});
-		}
+		// YMCS rejects an update without both serverName and url, even when only one changes.
 		const response = await ymcsApiRequest.call(
 			this,
 			'PATCH',
 			`/v2/rps/servers/${rpsServerId}`,
-			updateFields,
+			{ serverName, url, ...updateFields },
 		);
 		return updateResult(response);
 	}
@@ -1213,6 +1221,19 @@ async function handleRpsOperation(
 	throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`, {
 		itemIndex: i,
 	});
+}
+
+/**
+ * The SIP account fields the UI collects under Additional Fields, with the flat SIP Server 2
+ * host/port pair folded into the `{ host, port }` object YMCS expects.
+ */
+function sipAccountExtras(fields: IDataObject): IDataObject {
+	const { sipServer2Host, sipServer2Port, ...rest } = fields;
+	const out: IDataObject = { ...rest };
+	if (sipServer2Host) {
+		out.sipServer2 = { host: sipServer2Host, port: sipServer2Port ?? 5060 };
+	}
+	return out;
 }
 
 async function handleSipAccountOperation(
@@ -1230,11 +1251,17 @@ async function handleSipAccountOperation(
 		const label = this.getNodeParameter('label', i, '') as string;
 		const siteId = this.getNodeParameter('siteId', i, '', { extractValue: true }) as string;
 		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
-		const body: IDataObject = { registerName, username, password, sipServer1Host, sipServer1Port };
+		const body: IDataObject = {
+			registerName,
+			username,
+			password,
+			sipServer1: { host: sipServer1Host, port: sipServer1Port },
+			...sipAccountExtras(additionalFields),
+		};
 		if (displayNameField) body.displayName = displayNameField;
 		if (label) body.label = label;
 		if (siteId) body.siteId = siteId;
-		return await ymcsApiRequest.call(this, 'POST', '/v2/dm/sipAccounts', { ...body, ...additionalFields });
+		return await ymcsApiRequest.call(this, 'POST', '/v2/dm/sipAccounts', body);
 	}
 
 	if (operation === 'delete') {
@@ -1262,19 +1289,25 @@ async function handleSipAccountOperation(
 	}
 
 	if (operation === 'update') {
+		// Despite being a PATCH, YMCS replaces the account: registerName, username, password and
+		// sipServer1 are required on every update, and a partial body answers 400.
 		const accountId = this.getNodeParameter('accountId', i) as string;
-		const updateFields = this.getNodeParameter('updateFields', i, {}) as IDataObject;
-		if (Object.keys(updateFields).length === 0) {
-			throw new NodeOperationError(this.getNode(), 'No fields provided to update', {
-				itemIndex: i,
-				description: "Add at least one field to 'Update Fields'.",
-			});
-		}
+		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
+		const body: IDataObject = {
+			registerName: this.getNodeParameter('registerName', i) as string,
+			username: this.getNodeParameter('username', i) as string,
+			password: this.getNodeParameter('password', i) as string,
+			sipServer1: {
+				host: this.getNodeParameter('sipServer1Host', i) as string,
+				port: this.getNodeParameter('sipServer1Port', i) as number,
+			},
+			...sipAccountExtras(additionalFields),
+		};
 		const response = await ymcsApiRequest.call(
 			this,
 			'PATCH',
 			`/v2/dm/sipAccounts/${accountId}`,
-			updateFields,
+			body,
 		);
 		return updateResult(response);
 	}
@@ -1374,32 +1407,14 @@ async function handleConfigurationOperation(
 	}
 
 	if (operation === 'createDeviceConfig') {
-		const name = this.getNodeParameter('name', i) as string;
-		const modelId = this.getNodeParameter('modelId', i) as string;
+		const deviceId = this.getNodeParameter('deviceId', i) as string;
+		const content = this.getNodeParameter('content', i) as string;
 		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
 		return await ymcsApiRequest.call(this, 'POST', '/v2/dm/deviceConfigs', {
-			name,
-			modelId,
+			deviceId,
+			content,
 			...additionalFields,
 		});
-	}
-
-	if (operation === 'updateDeviceConfig') {
-		const configId = this.getNodeParameter('configId', i) as string;
-		const name = this.getNodeParameter('name', i) as string;
-		const modelId = this.getNodeParameter('modelId', i) as string;
-		const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
-		const response = await ymcsApiRequest.call(
-			this,
-			'PATCH',
-			`/v2/dm/deviceConfigs/${configId}`,
-			{
-				name,
-				modelId,
-				...additionalFields,
-			},
-		);
-		return updateResult(response);
 	}
 
 	if (operation === 'deleteDeviceConfigs') {
@@ -1415,6 +1430,7 @@ async function handleConfigurationOperation(
 			this,
 			'POST',
 			`/v2/dm/deviceConfigs/${configId}/push`,
+			{},
 		);
 	}
 
@@ -1481,6 +1497,7 @@ async function handleConfigurationOperation(
 			this,
 			'POST',
 			`/v2/dm/siteConfigs/${configId}/push`,
+			{},
 		);
 	}
 
@@ -1547,6 +1564,7 @@ async function handleConfigurationOperation(
 			this,
 			'POST',
 			`/v2/dm/groupConfigs/${configId}/push`,
+			{},
 		);
 	}
 

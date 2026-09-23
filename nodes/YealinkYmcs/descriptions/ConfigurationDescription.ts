@@ -103,12 +103,6 @@ export const configurationOperations: INodeProperties[] = [
 				action: 'Push a site configuration',
 			},
 			{
-				name: 'Update Device Config',
-				value: 'updateDeviceConfig',
-				description: 'Update a device-level configuration',
-				action: 'Update a device configuration',
-			},
-			{
 				name: 'Update Group Config',
 				value: 'updateGroupConfig',
 				description: 'Update a group-level configuration',
@@ -133,14 +127,17 @@ export const configurationFields: INodeProperties[] = [
 	// ----------------------------------
 	//   configuration: createDeviceConfig
 	// ----------------------------------
+	// A device has at most one device config, named after its MAC by the server. There is no
+	// update: YMCS answers PATCH with 405, and a second create answers 400 code 800003.
 	{
-		displayName: 'Name',
-		name: 'name',
+		displayName: 'Device ID',
+		name: 'deviceId',
 		type: 'string',
 		required: true,
 		default: '',
-		placeholder: 'e.g. my config',
-		description: 'Configuration name, maximum length 64 characters',
+		placeholder: 'e.g. 8d07a56207074d26b61026099625b9e2',
+		description:
+			'The device to configure. A device has one device config; to change it, delete it and create it again.',
 		displayOptions: {
 			show: {
 				resource: ['configuration'],
@@ -149,12 +146,16 @@ export const configurationFields: INodeProperties[] = [
 		},
 	},
 	{
-		displayName: 'Model ID',
-		name: 'modelId',
+		displayName: 'Content',
+		name: 'content',
 		type: 'string',
+		typeOptions: {
+			rows: 5,
+		},
 		required: true,
 		default: '',
-		description: 'The device model ID. Leave blank to indicate all models.',
+		placeholder: 'e.g. lang.wui=English',
+		description: 'Provisioning file lines. YMCS adds the #!version header.',
 		displayOptions: {
 			show: {
 				resource: ['configuration'],
@@ -176,100 +177,12 @@ export const configurationFields: INodeProperties[] = [
 		},
 		options: [
 			{
-				displayName: 'Content',
-				name: 'content',
-				type: 'string',
-				typeOptions: {
-					rows: 5,
-				},
-				default: '',
-				placeholder: 'e.g. #!version:1.0.0.1\\naccount.1.codec.g722.enable=1',
-				description: 'Configuration file content',
-			},
-			{
-				displayName: 'Description',
-				name: 'Description',
-				type: 'string',
-				default: '',
-				description: 'Description of the configuration, maximum length 256 characters',
-			},
-		],
-	},
-
-	// ----------------------------------
-	//   configuration: updateDeviceConfig
-	// ----------------------------------
-	{
-		displayName: 'Config ID',
-		name: 'configId',
-		type: 'string',
-		required: true,
-		default: '',
-		description: 'The device configuration ID to update',
-		displayOptions: {
-			show: {
-				resource: ['configuration'],
-				operation: ['updateDeviceConfig'],
-			},
-		},
-	},
-	{
-		displayName: 'Name',
-		name: 'name',
-		type: 'string',
-		required: true,
-		default: '',
-		description: 'Configuration name, maximum length 64 characters',
-		displayOptions: {
-			show: {
-				resource: ['configuration'],
-				operation: ['updateDeviceConfig'],
-			},
-		},
-	},
-	{
-		displayName: 'Model ID',
-		name: 'modelId',
-		type: 'string',
-		required: true,
-		default: '',
-		description: 'The device model ID. Leave blank to indicate all models.',
-		displayOptions: {
-			show: {
-				resource: ['configuration'],
-				operation: ['updateDeviceConfig'],
-			},
-		},
-	},
-	{
-		displayName: 'Additional Fields',
-		name: 'additionalFields',
-		type: 'collection',
-		placeholder: 'Add Field',
-		default: {},
-		displayOptions: {
-			show: {
-				resource: ['configuration'],
-				operation: ['updateDeviceConfig'],
-			},
-		},
-		options: [
-			{
-				displayName: 'Content',
-				name: 'content',
-				type: 'string',
-				typeOptions: {
-					rows: 5,
-				},
-				default: '',
-				description: 'Configuration file content',
-			},
-			{
-				displayName: 'Description',
-				name: 'Description',
-				type: 'string',
-				default: '',
-				description: 'Description of the configuration, maximum length 256 characters',
+				displayName: 'Auto Push',
+				name: 'autoPush',
+				type: 'boolean',
+				default: false,
+				description:
+					'Whether to push this config automatically when the device first boots or is factory reset',
 			},
 		],
 	},

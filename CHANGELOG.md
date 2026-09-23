@@ -1,5 +1,45 @@
 # Changelog
 
+## [Unreleased]
+
+Every write operation was checked against the live API on 2026-09-23, working from the parameter
+values the UI collects down to the request. Before this, the node's writes had never been run. The
+fixes below cover every operation that sent a request the API rejects.
+
+### Fixed
+
+- **Device → Create Many, RPS → Create Many and Device Account → Bind** sent their list wrapped in
+  an object (`{ devices }`, `{ accounts }`). YMCS expects a bare JSON array and answered 412, as if
+  the body were missing.
+- **Device → Delete Many** ignored the Device ID Type field, so YMCS read every MAC as a device ID
+  and reported it as not found.
+- **SIP Account → Create** sent the SIP server as flat `sipServer1Host` and `sipServer1Port`
+  fields; YMCS expects a `sipServer1: { host, port }` object and answered 400. SIP Server 2 is
+  mapped the same way.
+- **SIP Account → Update** read an `Update Fields` collection the UI does not have, so it always
+  stopped with "No fields provided to update". It now sends the required fields the UI already
+  collects, because YMCS replaces the whole account on update.
+- **Configuration → Create Device Config** sent a name and model ID. YMCS takes `deviceId`,
+  `content` and optional `autoPush`, and allows one device config per device. The fields are
+  replaced accordingly.
+- **RPS → Delete** posted to `/v2/rps/deleteDevices` with `{ ids, idType }`. The endpoint is
+  `/v2/rps/delDevices` with `{ deviceIdType, deviceIds }`. It now returns the API's bulk result
+  (`total`, `successCount`, `failureCount`, `errors`), because a MAC that is not in RPS is a
+  per-item failure rather than an error.
+- **RPS → Delete Server** sent `DELETE /v2/rps/servers/{id}` with an ID the UI never collected;
+  YMCS has no single-server delete and answered 405. It now posts the Server IDs field to
+  `/v2/rps/delServers` and returns the bulk result.
+- **RPS → Update Server** failed unless both Server Name and URL were set, which YMCS requires on
+  every update. Both are now required top-level fields.
+- **Configuration → Push Device/Site/Group Config** and **Diagnosis → Capture Screenshot, Export
+  Syslog, Export Config** sent no request body. YMCS answers a bodyless request with 412; they
+  now send `{}`.
+
+### Removed
+
+- **Configuration → Update Device Config.** YMCS has no such endpoint and answers 405. To change a
+  device config, delete it and create it again.
+
 ## [0.3.0] - 2026-07-27
 
 ### Changed

@@ -647,6 +647,37 @@ export const rpsFields: INodeProperties[] = [
 			},
 		],
 	},
+	// YMCS requires Server Name and URL on every update, even when only one of them changes.
+	{
+		displayName: 'Server Name',
+		name: 'serverName',
+		type: 'string',
+		required: true,
+		default: '',
+		description: 'The server name, with no more than 20 characters. Required on every update.',
+		displayOptions: {
+			show: {
+				resource: ['rps'],
+				operation: ['updateServer'],
+			},
+		},
+	},
+	{
+		displayName: 'URL',
+		name: 'url',
+		type: 'string',
+		required: true,
+		default: '',
+		placeholder: 'e.g. https://provisioning.example.com/cfg',
+		description:
+			'The address of the server, with no more than 512 characters. Required on every update.',
+		displayOptions: {
+			show: {
+				resource: ['rps'],
+				operation: ['updateServer'],
+			},
+		},
+	},
 	{
 		displayName: 'Update Fields',
 		name: 'updateFields',
@@ -701,20 +732,6 @@ export const rpsFields: INodeProperties[] = [
 				type: 'string',
 				default: '',
 				description: 'The URL of the server certificate',
-			},
-			{
-				displayName: 'Server Name',
-				name: 'serverName',
-				type: 'string',
-				default: '',
-				description: 'The server name, with no more than 20 characters',
-			},
-			{
-				displayName: 'URL',
-				name: 'url',
-				type: 'string',
-				default: '',
-				description: 'The address of the server, with no more than 512 characters',
 			},
 		],
 	},

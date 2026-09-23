@@ -202,7 +202,7 @@ export async function ymcsApiRequest(
 	this: IExecuteFunctions | ILoadOptionsFunctions | IHookFunctions | IWebhookFunctions,
 	method: IHttpRequestMethods,
 	endpoint: string,
-	body?: IDataObject,
+	body?: IDataObject | IDataObject[],
 	qs: IDataObject = {},
 ): Promise<IDataObject> {
 	const credentials = await this.getCredentials('yealinkYmcsApi');
@@ -225,7 +225,8 @@ export async function ymcsApiRequest(
 		// n8n's HTTP layer silently drops an empty object body, so the request would go
 		// out with no body at all and YMCS answers 412 (code 900444). Sending the
 		// already-serialized form puts `{}` on the wire; non-empty bodies are unaffected.
-		requestOptions.body = Object.keys(body).length === 0 ? '{}' : body;
+		// Arrays go through untouched: the bulk adds and bindAccounts take a bare JSON array.
+		requestOptions.body = !Array.isArray(body) && Object.keys(body).length === 0 ? '{}' : body;
 	}
 
 	try {
